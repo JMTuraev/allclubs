@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  background-color: #111827; /* gray-900 */
+}
+
+.apexcharts-canvas {
+  pointer-events: auto;
+}
+
+.apexcharts-tooltip {
+  pointer-events: none;
+}
+
+.apexcharts-svg title {
+  display: none !important;
+}
