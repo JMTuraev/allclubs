@@ -1,3 +1,5 @@
+import { ProductProvider } from "./context/ProductContext";
+
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 
 import PublicLayout from "./layouts/PublicLayout"
@@ -10,21 +12,21 @@ import Login from "./pages/Login"
 import CreateClub from "./pages/CreateClub"
 
 import Dashboard from "./pages/Dashboard"
-
 import PackageList from "./pages/PackageList"
 import CreatePackage from "./pages/CreatePackage"
-
 import StaffList from "./pages/StaffList"
 import CreateStaff from "./pages/CreateStaff"
-
 import Clients from "./pages/ClientsPage"
 import CreateClient from "./pages/CreateClient"
-
-import ClientProfilePage from "./pages/ClientProfilePage.jsx"
-import SessionsPage from "./pages/SessionsPage.jsx"
+import ClientProfilePage from "./pages/ClientProfilePage"
+import SessionsPage from "./pages/SessionsPage"
+import BarPage from "./pages/BarPage"
+import NewProductPage from "./pages/NewProductPage"
+import MenuPage from "./pages/MenuPage"
 
 export default function App() {
   return (
+     <ProductProvider>
     <BrowserRouter>
       <Routes>
 
@@ -48,7 +50,12 @@ export default function App() {
           <Route path="clients" element={<Clients />} />
           <Route path="clients/create" element={<CreateClient />} />
           <Route path="sessions" element={<SessionsPage />} />
+          <Route path="bar" element={<BarPage />} />
+          <Route path="bar/new" element={<NewProductPage />} />
         </Route>
+
+        {/* 🔥 POS PAGE — LAYOUTDAN TASHQARI */}
+        <Route path="/app/menu" element={<MenuPage />} />
 
         {/* PROFILE */}
         <Route path="/client/:clientId" element={<ClientProfilePage />} />
@@ -58,5 +65,6 @@ export default function App() {
 
       </Routes>
     </BrowserRouter>
+    </ProductProvider>
   )
 }

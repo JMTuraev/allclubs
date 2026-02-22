@@ -7,17 +7,19 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="h-[100dvh] flex bg-gray-900 text-white overflow-hidden">
+
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      <div className="lg:pl-72">
+      <div className="flex-1 flex flex-col lg:pl-72 min-h-0">
+
         <Header setSidebarOpen={setSidebarOpen} />
 
-        <main className="py-10">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <Outlet />
-          </div>
+        {/* IMPORTANT */}
+        <main className="flex-1 min-h-0 overflow-hidden p-6">
+          <Outlet />
         </main>
+
       </div>
     </div>
   )
