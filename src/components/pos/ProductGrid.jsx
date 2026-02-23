@@ -3,7 +3,7 @@ import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 
 export default function ProductGrid({
   products,
-  mode = "pos", // "pos" | "admin"
+  mode = "admin", // "pos" | "admin"
   selectedClient,
   cart = [],
   onAdd,

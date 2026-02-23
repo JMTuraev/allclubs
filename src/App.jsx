@@ -22,10 +22,10 @@ import CreateClient from "./pages/CreateClient";
 import ClientProfilePage from "./pages/ClientProfilePage";
 import SessionsPage from "./pages/SessionsPage";
 
-import BarPage from "./pages/BarPage";
-import NewProductPage from "./pages/NewProductPage";
-import IncomingGoodsPage from "./pages/IncomingGoodsPage";
-import MenuPage from "./pages/MenuPage";
+
+import NewProductPage from "./pages/bar/NewProductPage";
+import IncomingGoodsPage from "./pages/bar/IncomingGoodsPage";
+import MenuPage from "./pages/bar/MenuPage";
 
 export default function App() {
 
