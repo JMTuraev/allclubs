@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useProducts } from "../context/ProductContext";
 
 import ActiveClients from "../components/pos/ActiveClients";
@@ -12,24 +12,30 @@ const activeClients = [
   { id: 2, name: "Client 2", locker: "#13" },
 ];
 
-const categories = [
-  { id: "cat_1", name: "Drinks" },
-  { id: "cat_2", name: "Snacks" },
-];
-
 export default function MenuPage() {
-  const { products } = useProducts();
+  const { categories, products } = useProducts();
 
   const [selectedClient, setSelectedClient] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(categories[0]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [cart, setCart] = useState([]);
 
-  const filteredProducts = products.filter(
-    (p) =>
-      p.categoryId === selectedCategory.id &&
-      p.isActive
-  );
+  /* ===== AUTO SELECT FIRST CATEGORY ===== */
+  useEffect(() => {
+    if (!selectedCategory && categories.length > 0) {
+      setSelectedCategory(categories[0]);
+    }
+  }, [categories, selectedCategory]);
 
+  /* ===== FILTER PRODUCTS ===== */
+  const filteredProducts = selectedCategory
+    ? products.filter(
+        (p) =>
+          p.categoryId === selectedCategory.id &&
+          p.isActive
+      )
+    : [];
+
+  /* ===== CART LOGIC ===== */
   const addToCart = (product) => {
     if (!selectedClient) return;
 
@@ -73,6 +79,7 @@ export default function MenuPage() {
   return (
     <div className="h-screen bg-[#0b1220] p-4 flex gap-4 text-white overflow-hidden">
 
+      {/* ===== ACTIVE CLIENTS ===== */}
       <div className="w-56 border border-white/10 rounded-2xl bg-[#0f172a]">
         <ActiveClients
           clients={activeClients}
@@ -84,13 +91,15 @@ export default function MenuPage() {
         />
       </div>
 
+      {/* ===== POS PANEL ===== */}
       <div className="relative flex-1 rounded-2xl border border-white/10 bg-[#0e1628] overflow-hidden flex">
 
+        {/* CLEAN CATEGORY COLUMN */}
         <CategoriesColumn
           categories={categories}
           selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          cartCount={cart.length}
+          onSelect={setSelectedCategory}
+          adminMode={false}
         />
 
         <ProductGrid

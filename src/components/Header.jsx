@@ -1,7 +1,7 @@
 import {
   Bars3Icon,
   BellIcon,
-  BoltIcon,
+  CubeIcon,
 } from "@heroicons/react/24/outline"
 
 import {
@@ -16,34 +16,31 @@ export default function Header({ setSidebarOpen }) {
   const location = useLocation()
   const navigate = useNavigate()
 
-  /* ===== ROUTES ===== */
-  const isSessionsPage = location.pathname === "/app/sessions"
+  const path = location.pathname
 
-  const isPackagesPage = location.pathname === "/app/packages"
-  const isCreatePackagePage =
-    location.pathname === "/app/packages/create"
+  const isSessionsPage = path === "/app/sessions"
+  const isPackagesPage = path === "/app/packages"
+  const isCreatePackagePage = path === "/app/packages/create"
 
-  const isStaffPage = location.pathname === "/app/staffs"
-  const isCreateStaffPage =
-    location.pathname === "/app/staffs/create"
+  const isStaffPage = path === "/app/staffs"
+  const isCreateStaffPage = path === "/app/staffs/create"
 
-  const isClientsPage = location.pathname === "/app/clients"
-  const isCreateClientPage =
-    location.pathname === "/app/clients/create"
+  const isClientsPage = path === "/app/clients"
+  const isCreateClientPage = path === "/app/clients/create"
 
-  /* ===== POS OPEN ===== */
-  const openPOS = () => {
-    const url = window.location.origin + "/app/menu"
+  /* ================= OPEN BAR NEW TAB ================= */
+
+  const openBar = () => {
+    const url = window.location.origin + "/bar"
     window.open(url, "_blank", "noopener,noreferrer")
   }
 
   return (
     <div className="sticky top-0 z-40 flex h-16 items-center border-b border-white/10 bg-gray-900 px-6">
 
-      {/* ================= LEFT SIDE ================= */}
+      {/* ================= LEFT ================= */}
       <div className="flex items-center gap-4">
 
-        {/* Mobile sidebar */}
         <button
           onClick={() => setSidebarOpen(true)}
           className="lg:hidden text-white hover:text-gray-300 transition"
@@ -51,88 +48,61 @@ export default function Header({ setSidebarOpen }) {
           <Bars3Icon className="h-6 w-6" />
         </button>
 
-        {/* ===== SESSIONS TITLE ===== */}
         {isSessionsPage && (
-          <div className="flex flex-col">
-            <h1 className="text-lg font-semibold text-white">
-              Sessions
-            </h1>
-          </div>
+          <h1 className="text-lg font-semibold text-white">
+            Sessions
+          </h1>
         )}
 
-        {/* ===== CREATE PACKAGE BACK ===== */}
         {isCreatePackagePage && (
-          <HeaderBack
-            title="Создать тариф"
-            navigate={navigate}
-          />
+          <HeaderBack title="Создать тариф" navigate={navigate} />
         )}
 
-        {/* ===== CREATE STAFF BACK ===== */}
         {isCreateStaffPage && (
-          <HeaderBack
-            title="Новый сотрудник"
-            navigate={navigate}
-          />
+          <HeaderBack title="Новый сотрудник" navigate={navigate} />
         )}
 
-        {/* ===== CREATE CLIENT BACK ===== */}
         {isCreateClientPage && (
-          <HeaderBack
-            title="Новый клиент"
-            navigate={navigate}
-          />
+          <HeaderBack title="Новый клиент" navigate={navigate} />
         )}
       </div>
 
-      {/* ================= RIGHT SIDE ================= */}
+      {/* ================= RIGHT ================= */}
       <div className="ml-auto flex items-center gap-6">
 
-        {/* ===== SESSIONS FILTER ===== */}
-        {isSessionsPage && (
-          <Filter onChange={() => {}} />
-        )}
+        {isSessionsPage && <Filter onChange={() => {}} />}
 
-        {/* ===== CREATE PACKAGE ===== */}
         {isPackagesPage && (
           <CreateButton
             text="Создать тариф"
             color="indigo"
-            onClick={() =>
-              navigate("/app/packages/create")
-            }
+            onClick={() => navigate("/app/packages/create")}
           />
         )}
 
-        {/* ===== CREATE STAFF ===== */}
         {isStaffPage && (
           <CreateButton
             text="Новый сотрудник"
             color="emerald"
-            onClick={() =>
-              navigate("/app/staffs/create")
-            }
+            onClick={() => navigate("/app/staffs/create")}
           />
         )}
 
-        {/* ===== CREATE CLIENT ===== */}
         {isClientsPage && (
           <CreateButton
             text="Новый клиент"
             color="violet"
-            onClick={() =>
-              navigate("/app/clients/create")
-            }
+            onClick={() => navigate("/app/clients/create")}
           />
         )}
 
-        {/* 🔥 POS BUTTON (HEADER GLOBAL) */}
+        {/* 🔥 BAR NEW TAB */}
         <button
-          onClick={openPOS}
-          className="flex items-center justify-center h-9 w-9 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 transition group"
-          title="Open POS"
+          onClick={openBar}
+          className="flex items-center justify-center h-9 w-9 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition"
+          title="Open Bar"
         >
-          <BoltIcon className="h-5 w-5 text-indigo-400 group-hover:text-white transition" />
+          <CubeIcon className="h-5 w-5" />
         </button>
 
         {/* Notifications */}
@@ -156,6 +126,7 @@ export default function Header({ setSidebarOpen }) {
 }
 
 /* ================= BACK HEADER ================= */
+
 function HeaderBack({ title, navigate }) {
   return (
     <div className="flex items-center gap-3">
@@ -174,6 +145,7 @@ function HeaderBack({ title, navigate }) {
 }
 
 /* ================= CREATE BUTTON ================= */
+
 function CreateButton({ text, color, onClick }) {
   const colors = {
     indigo:
@@ -185,42 +157,22 @@ function CreateButton({ text, color, onClick }) {
   }
 
   return (
-    <>
-      {/* Desktop */}
-      <button
-        onClick={onClick}
-        className={`
-          hidden sm:flex items-center gap-2
-          rounded-lg
-          bg-gradient-to-r ${colors[color]}
-          px-4 py-2
-          text-sm font-semibold text-white
-          shadow-lg
-          hover:scale-105
-          active:scale-95
-          transition-all duration-300
-        `}
-      >
-        <PlusIcon className="h-5 w-5" />
-        {text}
-      </button>
-
-      {/* Mobile */}
-      <button
-        onClick={onClick}
-        className={`
-          sm:hidden
-          rounded-full
-          bg-${color}-600
-          p-2
-          text-white
-          shadow-md
-          active:scale-95
-          transition
-        `}
-      >
-        <PlusIcon className="h-5 w-5" />
-      </button>
-    </>
+    <button
+      onClick={onClick}
+      className={`
+        hidden sm:flex items-center gap-2
+        rounded-lg
+        bg-gradient-to-r ${colors[color]}
+        px-4 py-2
+        text-sm font-semibold text-white
+        shadow-lg
+        hover:scale-105
+        active:scale-95
+        transition-all duration-300
+      `}
+    >
+      <PlusIcon className="h-5 w-5" />
+      {text}
+    </button>
   )
 }
