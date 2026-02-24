@@ -13,17 +13,21 @@ const activeClients = [
 ];
 
 export default function MenuPage() {
-  const { categories, products } = useProducts();
+  const { categories, products, updateProduct } = useProducts();
 
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [cart, setCart] = useState([]);
+
+  /* ================= AUTO SELECT FIRST CATEGORY ================= */
 
   useEffect(() => {
     if (!selectedCategory && categories.length > 0) {
       setSelectedCategory(categories[0]);
     }
   }, [categories, selectedCategory]);
+
+  /* ================= FILTER PRODUCTS ================= */
 
   const filteredProducts = selectedCategory
     ? products.filter(
@@ -33,12 +37,16 @@ export default function MenuPage() {
       )
     : [];
 
+  /* ================= ADD TO CART ================= */
+
   const addToCart = (product) => {
-    if (!selectedClient) return;
+    if (!selectedClient || product.stock <= 0) return;
 
     const existing = cart.find(i => i.id === product.id);
 
     if (existing) {
+      if (existing.qty >= product.stock) return; // stock limit
+
       setCart(
         cart.map(i =>
           i.id === product.id
@@ -50,6 +58,8 @@ export default function MenuPage() {
       setCart([...cart, { ...product, qty: 1 }]);
     }
   };
+
+  /* ================= DECREASE ================= */
 
   const decreaseQty = (id) => {
     const existing = cart.find(i => i.id === id);
@@ -68,15 +78,47 @@ export default function MenuPage() {
     }
   };
 
+  /* ================= TOTAL ================= */
+
   const total = cart.reduce(
     (sum, item) => sum + item.price * item.qty,
     0
   );
 
+  /* ================= PAYMENT ================= */
+
+  const handlePayment = () => {
+    if (!cart.length) return;
+
+    // 1️⃣ Stock check
+    for (let item of cart) {
+      const product = products.find(p => p.id === item.id);
+      if (!product || product.stock < item.qty) {
+        alert(`${item.name} yetarli emas`);
+        return;
+      }
+    }
+
+    // 2️⃣ Stock kamaytirish
+    cart.forEach(item => {
+      const product = products.find(p => p.id === item.id);
+      if (!product) return;
+
+      updateProduct(item.id, {
+        stock: product.stock - item.qty
+      });
+    });
+
+    // 3️⃣ Cart tozalash
+    setCart([]);
+  };
+
+  /* ================= RENDER ================= */
+
   return (
     <div className="h-full bg-[#0b1220] p-4 flex gap-4 text-white overflow-hidden">
 
-      {/* ACTIVE CLIENTS */}
+      {/* CLIENTS */}
       <div className="w-52 border border-white/10 rounded-2xl bg-[#0f172a] overflow-hidden">
         <ActiveClients
           clients={activeClients}
@@ -88,8 +130,8 @@ export default function MenuPage() {
         />
       </div>
 
-      {/* MAIN POS PANEL */}
-      <div className="flex-1 flex rounded-2xl border border-white/10 bg-[#0e1628] overflow-hidden">
+      {/* MAIN PANEL */}
+      <div className="flex-1 relative flex rounded-2xl border border-white/10 bg-[#0e1628] overflow-hidden">
 
         {/* CATEGORY */}
         <div className="w-44 border-r border-white/10">
@@ -101,21 +143,13 @@ export default function MenuPage() {
         </div>
 
         {/* PRODUCTS */}
-        <div className="flex-1 relative">
+        <div className="flex-1">
           <PosProducts
             products={filteredProducts}
             selectedClient={selectedClient}
             cart={cart}
             onAdd={addToCart}
           />
-
-          {!selectedClient && (
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
-              <div className="text-base font-semibold opacity-80">
-                Select Client First
-              </div>
-            </div>
-          )}
         </div>
 
         {/* CHECKOUT */}
@@ -125,8 +159,18 @@ export default function MenuPage() {
             cart={cart}
             total={total}
             onDecrease={decreaseQty}
+            onPayment={handlePayment}
           />
         </div>
+
+        {/* 🔥 GLOBAL OVERLAY */}
+        {!selectedClient && (
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="text-lg font-semibold opacity-90">
+              Select Client First
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

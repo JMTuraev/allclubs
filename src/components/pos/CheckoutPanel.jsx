@@ -2,19 +2,18 @@ export default function CheckoutPanel({
   selectedClient,
   cart,
   total,
-  onDecrease
+  onDecrease,
+  onPayment
 }) {
   return (
     <div className="h-full flex flex-col">
 
-      {/* HEADER */}
       <div className="px-4 py-3 border-b border-white/10 shrink-0">
         <div className="text-sm font-semibold">
           Check {selectedClient ? `#${selectedClient.locker}` : "-"}
         </div>
       </div>
 
-      {/* ITEMS */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
 
         {cart.length === 0 && (
@@ -54,7 +53,6 @@ export default function CheckoutPanel({
 
       </div>
 
-      {/* FOOTER */}
       <div className="border-t border-white/10 px-4 py-4 shrink-0 bg-[#0f172a]">
 
         <div className="flex justify-between items-center mb-3">
@@ -68,6 +66,7 @@ export default function CheckoutPanel({
         </div>
 
         <button
+          onClick={onPayment}
           disabled={!cart.length}
           className={`w-full rounded-lg py-2 text-sm font-semibold transition ${
             cart.length
@@ -79,7 +78,6 @@ export default function CheckoutPanel({
         </button>
 
       </div>
-
     </div>
   );
 }

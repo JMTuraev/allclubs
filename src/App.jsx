@@ -25,6 +25,7 @@ import SessionsPage from "./pages/SessionsPage";
 
 import NewProductPage from "./pages/bar/NewProductPage";
 import IncomingGoodsPage from "./pages/bar/IncomingGoodsPage";
+import IncomingHistoryPage from "./pages/bar/IncomingHistoryPage";
 import MenuPage from "./pages/bar/MenuPage";
 
 export default function App() {
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/bar/*" element={<BarLayout />}>
             <Route index element={<Navigate to="incoming" replace />} />
             <Route path="incoming" element={<IncomingGoodsPage />} />
+            <Route path="incoming/history" element={<IncomingHistoryPage />} />
             <Route path="new" element={<NewProductPage />} />
             <Route path="pos" element={<MenuPage />} />
           </Route>

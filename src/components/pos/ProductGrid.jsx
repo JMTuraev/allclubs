@@ -3,11 +3,10 @@ import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 
 export default function ProductGrid({
   products,
-  mode = "admin", // "pos" | "admin"
+  mode = "admin",
   selectedClient,
   cart = [],
   onAdd,
-  onDecrease,
   onAddClick,
   onEdit,
   onDelete,
@@ -17,7 +16,6 @@ export default function ProductGrid({
   return (
     <div className="flex-1 flex flex-col bg-[#0b1220]">
 
-      {/* HEADER */}
       <div className="p-4 border-b border-white/10 text-sm font-semibold">
         {mode === "pos"
           ? selectedClient
@@ -29,11 +27,13 @@ export default function ProductGrid({
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-3 gap-6">
 
-         
-          {/* ===== PRODUCTS ===== */}
           {products.map((product) => {
+
+            const isOutOfStock = product.stock <= 0;
+
             const disabled =
-              mode === "pos" && !selectedClient;
+              mode === "pos" &&
+              (!selectedClient || isOutOfStock);
 
             const cartItem =
               mode === "pos"
@@ -55,7 +55,25 @@ export default function ProductGrid({
                 }
               >
 
-                {/* ===== ADMIN 3 DOT ===== */}
+                {/* 🔵 QTY BADGE (TOP LEFT) */}
+                {mode === "pos" && cartItem && (
+                  <div className="absolute top-3 left-3 bg-indigo-600 text-white text-xs px-2 py-1 rounded-md font-semibold">
+                    {cartItem.qty}
+                  </div>
+                )}
+
+                {/* 📦 STOCK SHORT (TOP RIGHT) */}
+                {mode === "pos" && (
+                  <div className={`absolute top-3 right-3 text-xs px-2 py-1 rounded-md font-medium ${
+                    isOutOfStock
+                      ? "bg-red-500/20 text-red-400"
+                      : "bg-white/20 text-white"
+                  }`}>
+                    {isOutOfStock ? "0" : product.stock}
+                  </div>
+                )}
+
+                {/* ===== ADMIN MENU ===== */}
                 {mode === "admin" && (
                   <div className="absolute top-3 right-3 z-20 opacity-0 group-hover:opacity-100 transition">
                     <button
@@ -67,16 +85,7 @@ export default function ProductGrid({
                             : product.id
                         );
                       }}
-                      className="
-                        p-2
-                        rounded-full
-                        bg-white/90
-                        backdrop-blur
-                        border border-black/10
-                        shadow-md
-                        hover:shadow-lg
-                        transition
-                      "
+                      className="p-2 rounded-full bg-white/90 backdrop-blur border border-black/10 shadow-md hover:shadow-lg transition"
                     >
                       <EllipsisVerticalIcon className="h-4 w-4 text-gray-800" />
                     </button>
@@ -109,19 +118,12 @@ export default function ProductGrid({
                   </div>
                 )}
 
-                {/* ===== POS BADGE ===== */}
-                {mode === "pos" && cartItem && (
-                  <div className="absolute top-3 right-3 w-7 h-7 bg-indigo-600 text-white text-xs flex items-center justify-center rounded-full">
-                    {cartItem.qty}
-                  </div>
-                )}
-
                 {/* IMAGE */}
                 <div className="aspect-square w-full overflow-hidden">
                   <img
                     src={product.image}
                     alt={product.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover object-center"
                   />
                 </div>
 
@@ -136,11 +138,10 @@ export default function ProductGrid({
                   </div>
                 </div>
 
-
               </div>
             );
           })}
- {/* ===== ADMIN ADD CARD ===== */}
+
           {mode === "admin" && (
             <div
               onClick={onAddClick}

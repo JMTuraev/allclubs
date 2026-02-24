@@ -35,7 +35,6 @@ export function ProductProvider({ children }) {
       prev.filter(cat => cat.id !== id)
     );
 
-    // optional: remove related products
     setProducts(prev =>
       prev.filter(prod => prod.categoryId !== id)
     );
@@ -50,6 +49,8 @@ export function ProductProvider({ children }) {
       name: "Protein Shake",
       price: 15000,
       image: "/images/1.jpeg",
+      stock: 0, // 🔥 inventory field
+      purchasePrice: 0,
       isActive: true,
     },
   ]);
@@ -57,6 +58,8 @@ export function ProductProvider({ children }) {
   const addProduct = (data) => {
     const newProduct = {
       id: uuid(),
+      stock: 0,              // 🔥 default stock
+      purchasePrice: 0,
       ...data,
       isActive: true,
     };
@@ -82,9 +85,11 @@ export function ProductProvider({ children }) {
       value={{
         categories,
         products,
+
         addCategory,
         updateCategory,
         deleteCategory,
+
         addProduct,
         updateProduct,
         deleteProduct,
