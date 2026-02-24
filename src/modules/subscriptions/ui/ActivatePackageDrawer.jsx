@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { XMarkIcon } from "@heroicons/react/24/outline"
 import { usePackages } from "../../packages/domain/PackagesContext"
+import { useTransactions } from "../../../context/transaction/TransactionContext"
 import PaymentModal from "../../../components/modals/PaymentModal"
 
 export default function ActivatePackageDrawer({
@@ -9,6 +10,7 @@ export default function ActivatePackageDrawer({
   onConfirm,
 }) {
   const { packages } = usePackages()
+  const { addTransaction } = useTransactions()
 
   const [selected, setSelected] = useState(null)
   const [showPayment, setShowPayment] = useState(false)
@@ -124,21 +126,56 @@ export default function ActivatePackageDrawer({
           checkNumber={`SUB-${Date.now()}`}
           onClose={() => setShowPayment(false)}
           onConfirm={(paymentData) => {
-            // 1️⃣ payment muvaffaqiyatli
+
             setShowPayment(false)
 
-            // 2️⃣ yuqoriga package activation beramiz
+            const startDate = today
+            const endDate = new Date(
+              today.getTime() +
+              selected.duration * 24 * 60 * 60 * 1000
+            )
+
+            /* ================= 1️⃣ SERVICE TRANSACTION ================= */
+
+            addTransaction({
+              type: "service",
+              category: "package",
+              clientId: client.id,
+              amount: selected.price,
+              meta: {
+                packageId: selected.id,
+                packageName: selected.name,
+                startDate,
+                endDate,
+              },
+            })
+
+            /* ================= 2️⃣ PAYMENT TRANSACTIONS ================= */
+
+            Object.entries(paymentData.methods).forEach(
+              ([method, amount]) => {
+                if (Number(amount) > 0) {
+                  addTransaction({
+                    type: "payment",
+                    category: "package",
+                    clientId: client.id,
+                    amount: Number(amount),
+                    paymentMethod: method,
+                    comment: paymentData.comment,
+                  })
+                }
+              }
+            )
+
+            /* ================= PACKAGE ACTIVATE ================= */
+
             onConfirm({
               package: selected,
               payment: paymentData,
-              startDate: today,
-              endDate: new Date(
-                today.getTime() +
-                  selected.duration * 24 * 60 * 60 * 1000
-              ),
+              startDate,
+              endDate,
             })
 
-            // 3️⃣ drawer yopiladi
             onClose()
           }}
         />

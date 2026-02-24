@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useProducts } from "../../context/ProductContext";
 import { usePosCart } from "../../modules/bar/domain/usePosCart";
+import { useTransactions } from "../../context/transaction/TransactionContext";
 
 import ActiveClients from "../../components/pos/ActiveClients";
 import CategorySidebar from "../../components/bar/ui/CategorySidebar";
@@ -16,6 +17,7 @@ const activeClients = [
 
 export default function MenuPage() {
   const { categories, products, updateProduct } = useProducts();
+  const { addTransaction } = useTransactions();
 
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -39,6 +41,47 @@ export default function MenuPage() {
           p.isActive
       )
     : [];
+
+  /* ================= HANDLE PAYMENT ================= */
+
+  const handleConfirmPayment = (paymentData) => {
+
+    // 1️⃣ SERVICE TRANSACTION (bar sotuv)
+    addTransaction({
+      type: "service",
+      category: "bar",
+      clientId: pos.selectedClient?.id || null,
+      amount: pos.total,
+      meta: {
+        items: pos.cart.map(item => ({
+          productId: item.id,
+          name: item.name,
+          qty: item.qty,
+          price: item.price
+        }))
+      }
+    });
+
+    // 2️⃣ PAYMENT TRANSACTIONS (split)
+    Object.entries(paymentData.methods).forEach(([method, amount]) => {
+      if (Number(amount) > 0) {
+        addTransaction({
+          type: "payment",
+          category: "bar",
+          clientId: pos.selectedClient?.id || null,
+          amount: Number(amount),
+          paymentMethod: method,
+          comment: paymentData.comment
+        });
+      }
+    });
+
+    // 3️⃣ STOCK UPDATE
+    pos.handlePayment();
+
+    // 4️⃣ CLOSE MODAL
+    setIsPaymentOpen(false);
+  };
 
   /* ================= RENDER ================= */
 
@@ -86,7 +129,7 @@ export default function MenuPage() {
             cart={pos.cart}
             total={pos.total}
             onDecrease={pos.decreaseQty}
-            onPayment={() => setIsPaymentOpen(true)}   // 🔥 modal ochadi
+            onPayment={() => setIsPaymentOpen(true)}
           />
         </div>
 
@@ -101,15 +144,14 @@ export default function MenuPage() {
 
       </div>
 
-      {/* 🔥 PAYMENT MODAL */}
+      {/* PAYMENT MODAL */}
       {isPaymentOpen && (
         <PaymentModal
           total={pos.total}
+          client={{ name: pos.selectedClient?.name }}
+          checkNumber={`BAR-${Date.now()}`}
           onClose={() => setIsPaymentOpen(false)}
-          onConfirm={(methods) => {
-            pos.handlePayment();   // stock update
-            setIsPaymentOpen(false);
-          }}
+          onConfirm={handleConfirmPayment}
         />
       )}
     </div>
