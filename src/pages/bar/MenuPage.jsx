@@ -6,7 +6,7 @@ import ActiveClients from "../../components/pos/ActiveClients";
 import CategorySidebar from "../../components/bar/ui/CategorySidebar";
 import PosProducts from "../../modules/bar/pos/PosProducts";
 import CheckoutPanel from "../../components/pos/CheckoutPanel";
-import PaymentModal from "../../components/pos/PaymentModal";
+import PaymentModal from "../../components/modals/PaymentModal";
 
 const activeClients = [
   { id: "guest", name: "Guest", locker: "-" },

@@ -7,12 +7,14 @@ import {
 } from "@heroicons/react/24/solid";
 
 export default function PaymentModal({
-  total,
+  total = 0,              // ✅ default qo‘shildi
   client,
   checkNumber,
   onClose,
   onConfirm
 }) {
+  const safeTotal = Number(total) || 0;   // ✅ crash proof
+
   const [activeMethod, setActiveMethod] = useState(null);
   const [amounts, setAmounts] = useState({
     cash: 0,
@@ -31,12 +33,13 @@ export default function PaymentModal({
     );
   }, [amounts]);
 
-  const remaining = total - paid;
+  const remaining = safeTotal - paid;   // ✅ total o‘rniga safeTotal
   const isDebtUsed = amounts.debt > 0;
 
   const isValid =
-    remaining === 0 &&
-    total > 0 &&
+    Math.abs(remaining) < 0.01 &&       // ✅ float-safe
+    safeTotal > 0 &&
+    activeMethod !== null &&            // ✅ method tanlangan bo‘lishi shart
     (!isDebtUsed || comment.trim().length > 0);
 
   /* ================= ACTIVATE METHOD ================= */
@@ -45,14 +48,13 @@ export default function PaymentModal({
     setActiveMethod(method);
 
     setAmounts(prev => {
-      // agar hali qiymat kiritilmagan bo‘lsa auto-fill qilamiz
       if (!prev[method]) {
         const otherSum =
           Object.entries(prev)
             .filter(([k]) => k !== method)
             .reduce((sum, [, v]) => sum + v, 0);
 
-        const allowed = total - otherSum;
+        const allowed = safeTotal - otherSum;
 
         return {
           ...prev,
@@ -75,7 +77,7 @@ export default function PaymentModal({
           .filter(([k]) => k !== method)
           .reduce((sum, [, v]) => sum + v, 0);
 
-      const allowed = total - otherSum;
+      const allowed = safeTotal - otherSum;
 
       return {
         ...prev,
@@ -133,17 +135,14 @@ export default function PaymentModal({
         <div className="text-sm">
           Total:{" "}
           <span className="font-semibold">
-            {total.toLocaleString()} so'm
+            {safeTotal.toLocaleString()} so'm   {/* ✅ crash yo‘q */}
           </span>
         </div>
 
         {/* METHODS */}
         <div className="space-y-3">
           {methods.map((m) => (
-            <div
-              key={m.key}
-              className="flex items-center gap-3"
-            >
+            <div key={m.key} className="flex items-center gap-3">
               <button
                 onClick={() => activate(m.key)}
                 className={`flex items-center justify-center gap-2 w-32 py-2 rounded-lg text-sm font-medium transition 
@@ -171,31 +170,29 @@ export default function PaymentModal({
         </div>
 
         {/* COMMENT */}
-        <div>
-          <textarea
-            placeholder={
-              isDebtUsed
-                ? "Comment required (Debt)"
-                : "Comment (optional)"
-            }
-            value={comment}
-            onChange={(e) =>
-              setComment(e.target.value)
-            }
-            className={`w-full bg-[#0B1120] rounded px-3 py-2 text-sm ${
-              isDebtUsed && !comment
-                ? "border border-red-500"
-                : ""
-            }`}
-          />
-        </div>
+        <textarea
+          placeholder={
+            isDebtUsed
+              ? "Comment required (Debt)"
+              : "Comment (optional)"
+          }
+          value={comment}
+          onChange={(e) =>
+            setComment(e.target.value)
+          }
+          className={`w-full bg-[#0B1120] rounded px-3 py-2 text-sm ${
+            isDebtUsed && !comment
+              ? "border border-red-500"
+              : ""
+          }`}
+        />
 
         {/* REMAINING */}
         <div className="text-sm">
           Remaining:{" "}
           <span
             className={
-              remaining === 0
+              Math.abs(remaining) < 0.01
                 ? "text-emerald-400"
                 : "text-red-400"
             }

@@ -1,19 +1,29 @@
 export default function InfoCards({ sessions }) {
+
   const bar = sessions.reduce(
     (sum, s) =>
-      sum + s.bar.reduce((t, i) => t + i.price, 0),
+      sum +
+      (s.transactions || [])
+        .filter((tx) => tx.type === "bar")
+        .reduce((t, i) => t + i.amount, 0),
     0
   )
 
   const packageRevenue = sessions.reduce(
     (sum, s) =>
-      sum + s.package.reduce((t, i) => t + i.price, 0),
+      sum +
+      (s.transactions || [])
+        .filter((tx) => tx.type === "package")
+        .reduce((t, i) => t + i.amount, 0),
     0
   )
 
   const trainer = sessions.reduce(
     (sum, s) =>
-      sum + s.trainer.reduce((t, i) => t + i.price, 0),
+      sum +
+      (s.transactions || [])
+        .filter((tx) => tx.type === "trainer")
+        .reduce((t, i) => t + i.amount, 0),
     0
   )
 
@@ -67,15 +77,12 @@ function Card({ title, value, color, icon }) {
   return (
     <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gray-900 p-6 transition group hover:shadow-lg ${theme.glow}`}>
 
-      {/* Soft gradient */}
       <div className={`absolute inset-0 bg-gradient-to-br ${theme.bg}`} />
 
-      {/* Small Illustration */}
       <div className="absolute right-6 top-6 opacity-20 group-hover:opacity-30 transition">
         {icon}
       </div>
 
-      {/* Content */}
       <div className="relative z-10">
         <div className="text-sm text-gray-400">
           {title}
@@ -89,7 +96,7 @@ function Card({ title, value, color, icon }) {
   )
 }
 
-/* ================= ILLUSTRATIONS ================= */
+/* ================= ICONS ================= */
 
 function BarIcon() {
   return (

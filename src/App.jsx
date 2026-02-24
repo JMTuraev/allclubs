@@ -1,94 +1,147 @@
-import { useEffect } from "react";
-import { ProductProvider } from "./context/ProductContext";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 
-import PublicLayout from "./layouts/PublicLayout";
-import AppLayout from "./layouts/AppLayout";
-import BarLayout from "./layouts/BarLayout";
+/* ================= CONTEXTS ================= */
+import { ProductProvider } from "./context/ProductContext"
+import { ClientsProvider } from "./modules/clients/domain/ClientsContext"
+import { SessionsProvider } from "./modules/sessions/domain/SessionsContext"
+import { PackagesProvider } from "./modules/packages/domain/PackagesContext"
 
-import Home from "./pages/Home";
-import Pricing from "./pages/Pricing";
-import Contact from "./pages/Contact";
-import Login from "./pages/Login";
-import CreateClub from "./pages/CreateClub";
+/* ================= LAYOUTS ================= */
+import PublicLayout from "./layouts/PublicLayout"
+import AppLayout from "./layouts/AppLayout"
+import BarLayout from "./layouts/BarLayout"
 
-import Dashboard from "./pages/Dashboard";
-import PackageList from "./pages/PackageList";
-import CreatePackage from "./pages/CreatePackage";
-import StaffList from "./pages/StaffList";
-import CreateStaff from "./pages/CreateStaff";
-import Clients from "./pages/ClientsPage";
-import CreateClient from "./pages/CreateClient";
-import ClientProfilePage from "./pages/ClientProfilePage";
-import SessionsPage from "./pages/SessionsPage";
+/* ================= PUBLIC PAGES ================= */
+import Home from "./pages/Home"
+import Pricing from "./pages/Pricing"
+import Contact from "./pages/Contact"
+import Login from "./pages/Login"
+import CreateClub from "./pages/CreateClub"
 
+/* ================= DASHBOARD ================= */
+import Dashboard from "./pages/Dashboard"
+import PackageList from "./pages/packages/PackageList"
+import CreatePackage from "./pages/packages/CreatePackage"
+import StaffList from "./pages/StaffList"
+import CreateStaff from "./pages/CreateStaff"
 
-import NewProductPage from "./pages/bar/NewProductPage";
-import IncomingGoodsPage from "./pages/bar/IncomingGoodsPage";
-import IncomingHistoryPage from "./pages/bar/IncomingHistoryPage";
-import MenuPage from "./pages/bar/MenuPage";
+/* ================= CLIENTS ================= */
+import ClientsPage from "./pages/clients/ClientsPage"
+import CreateClient from "./pages/clients/CreateClient"
+import ClientProfilePage from "./pages/clients/ClientProfilePage"
+
+/* ================= SESSIONS ================= */
+import SessionsPage from "./pages/sessions/SessionsPage"
+
+/* ================= BAR ================= */
+import NewProductPage from "./pages/bar/NewProductPage"
+import IncomingGoodsPage from "./pages/bar/IncomingGoodsPage"
+import IncomingHistoryPage from "./pages/bar/IncomingHistoryPage"
+import MenuPage from "./pages/bar/MenuPage"
 
 export default function App() {
-
-  // 🔥 GLOBAL DYNAMIC HEIGHT FIX
   useEffect(() => {
     const setAppHeight = () => {
       document.documentElement.style.setProperty(
         "--app-height",
         `${window.innerHeight}px`
-      );
-    };
+      )
+    }
 
-    setAppHeight();
-    window.addEventListener("resize", setAppHeight);
+    setAppHeight()
+    window.addEventListener("resize", setAppHeight)
 
-    return () => window.removeEventListener("resize", setAppHeight);
-  }, []);
+    return () =>
+      window.removeEventListener("resize", setAppHeight)
+  }, [])
 
   return (
     <ProductProvider>
-      <BrowserRouter>
-        <Routes>
+      <ClientsProvider>
+        <PackagesProvider>
+          <SessionsProvider>
+            <BrowserRouter>
+              <Routes>
 
-          {/* ================= PUBLIC ================= */}
-          <Route element={<PublicLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/contacts" element={<Contact />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/create-club" element={<CreateClub />} />
-          </Route>
+                {/* ================= PUBLIC ================= */}
+                <Route element={<PublicLayout />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/contacts" element={<Contact />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/create-club" element={<CreateClub />} />
+                </Route>
 
-          {/* ================= DASHBOARD ================= */}
-          <Route path="/app/*" element={<AppLayout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="packages" element={<PackageList />} />
-            <Route path="packages/create" element={<CreatePackage />} />
-            <Route path="staffs" element={<StaffList />} />
-            <Route path="staffs/create" element={<CreateStaff />} />
-            <Route path="clients" element={<Clients />} />
-            <Route path="clients/create" element={<CreateClient />} />
-            <Route path="sessions" element={<SessionsPage />} />
-          </Route>
+                {/* ================= PROFILE (FULL PAGE) ================= */}
+                <Route
+                  path="/clients/:id"
+                  element={<ClientProfilePage />}
+                />
 
-          {/* ================= BAR MODULE ================= */}
-          <Route path="/bar/*" element={<BarLayout />}>
-            <Route index element={<Navigate to="incoming" replace />} />
-            <Route path="incoming" element={<IncomingGoodsPage />} />
-            <Route path="incoming/history" element={<IncomingHistoryPage />} />
-            <Route path="new" element={<NewProductPage />} />
-            <Route path="pos" element={<MenuPage />} />
-          </Route>
+                {/* ================= DASHBOARD ================= */}
+                <Route path="/app/*" element={<AppLayout />}>
+                  <Route
+                    index
+                    element={<Navigate to="dashboard" replace />}
+                  />
 
-          {/* ================= PROFILE ================= */}
-          <Route path="/client/:clientId" element={<ClientProfilePage />} />
+                  <Route path="dashboard" element={<Dashboard />} />
 
-          {/* ================= 404 ================= */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+                  {/* PACKAGES */}
+                  <Route path="packages" element={<PackageList />} />
+                  <Route
+                    path="packages/create"
+                    element={<CreatePackage />}
+                  />
 
-        </Routes>
-      </BrowserRouter>
+                  {/* STAFF */}
+                  <Route path="staffs" element={<StaffList />} />
+                  <Route
+                    path="staffs/create"
+                    element={<CreateStaff />}
+                  />
+
+                  {/* CLIENTS */}
+                  <Route path="clients" element={<ClientsPage />} />
+                  <Route
+                    path="clients/create"
+                    element={<CreateClient />}
+                  />
+
+                  {/* SESSIONS */}
+                  <Route path="sessions" element={<SessionsPage />} />
+                </Route>
+
+                {/* ================= BAR MODULE ================= */}
+                <Route path="/bar/*" element={<BarLayout />}>
+                  <Route
+                    index
+                    element={<Navigate to="incoming" replace />}
+                  />
+                  <Route
+                    path="incoming"
+                    element={<IncomingGoodsPage />}
+                  />
+                  <Route
+                    path="incoming/history"
+                    element={<IncomingHistoryPage />}
+                  />
+                  <Route path="new" element={<NewProductPage />} />
+                  <Route path="pos" element={<MenuPage />} />
+                </Route>
+
+                {/* ================= 404 ================= */}
+                <Route
+                  path="*"
+                  element={<Navigate to="/" replace />}
+                />
+
+              </Routes>
+            </BrowserRouter>
+          </SessionsProvider>
+        </PackagesProvider>
+      </ClientsProvider>
     </ProductProvider>
-  );
+  )
 }

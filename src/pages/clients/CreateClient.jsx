@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useClientsContext } from "../../modules/clients/domain/ClientsContext"
 import {
   UserIcon,
   PhoneIcon,
@@ -10,6 +11,8 @@ import {
 
 export default function CreateClient() {
   const navigate = useNavigate()
+  const { addClient } = useClientsContext()
+
   const [preview, setPreview] = useState(null)
 
   const [form, setForm] = useState({
@@ -34,15 +37,34 @@ export default function CreateClient() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+
+    const newClient = {
+      id: Date.now(),
+      name: `${form.firstName} ${form.lastName}`.trim(),
+      phone: form.phone,
+      gender: form.gender,
+      age: null,
+      joined: new Date().toISOString(),
+      image: preview || null,
+      online: false,
+      locker: null,
+      lifetimeSpent: 0,
+      lastAction: "New client",
+      type: "lead",
+      note: form.note,
+      package: null,
+      sessions: [],
+    }
+
+    addClient(newClient)
+
     navigate("/app/clients")
   }
 
   return (
     <div className="px-6 pt-4 pb-6">
       <div className="max-w-3xl mx-auto bg-gray-900 border border-white/10 rounded-2xl shadow-lg">
-
         <form onSubmit={handleSubmit}>
-
           {/* Avatar */}
           <div className="flex flex-col items-center py-5 border-b border-white/10">
             {preview ? (
@@ -70,10 +92,7 @@ export default function CreateClient() {
 
           {/* Body */}
           <div className="p-6 space-y-5">
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-              {/* First Name */}
               <div>
                 <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                   <UserIcon className="h-4 w-4" />
@@ -89,7 +108,6 @@ export default function CreateClient() {
                 />
               </div>
 
-              {/* Last Name */}
               <div>
                 <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                   <UserIcon className="h-4 w-4" />
@@ -105,7 +123,6 @@ export default function CreateClient() {
                 />
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                   <PhoneIcon className="h-4 w-4" />
@@ -121,7 +138,6 @@ export default function CreateClient() {
                 />
               </div>
 
-              {/* Gender */}
               <div>
                 <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                   <UserCircleIcon className="h-4 w-4" />
@@ -137,10 +153,8 @@ export default function CreateClient() {
                   <option value="female">Female</option>
                 </select>
               </div>
-
             </div>
 
-            {/* Note */}
             <div>
               <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                 <DocumentTextIcon className="h-4 w-4" />
@@ -154,7 +168,6 @@ export default function CreateClient() {
                 className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-
           </div>
 
           {/* Actions */}
@@ -174,7 +187,6 @@ export default function CreateClient() {
               Save
             </button>
           </div>
-
         </form>
       </div>
     </div>
