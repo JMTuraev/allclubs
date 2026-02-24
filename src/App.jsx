@@ -39,6 +39,7 @@ import NewProductPage from "./pages/bar/NewProductPage"
 import IncomingGoodsPage from "./pages/bar/IncomingGoodsPage"
 import IncomingHistoryPage from "./pages/bar/IncomingHistoryPage"
 import MenuPage from "./pages/bar/MenuPage"
+import FinancePage from "./pages/finance/FinancePage"
 
 export default function App() {
   useEffect(() => {
@@ -94,6 +95,12 @@ export default function App() {
                     path="packages/create"
                     element={<CreatePackage />}
                   />
+
+                  
+                  {/* Finance */}
+                  <Route path="finance" element={<FinancePage />} />
+                  
+
 
                   {/* STAFF */}
                   <Route path="staffs" element={<StaffList />} />

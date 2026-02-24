@@ -10,7 +10,7 @@ import {
 } from "@heroicons/react/20/solid"
 
 import { useLocation, useNavigate } from "react-router-dom"
-import Filter from "../components/sessions/Filter"
+import Filter from "./Filter"
 
 export default function Header({ setSidebarOpen }) {
   const location = useLocation()
@@ -19,6 +19,7 @@ export default function Header({ setSidebarOpen }) {
   const path = location.pathname
 
   const isSessionsPage = path === "/app/sessions"
+  const isFinancePage = path === "/app/finance"
   const isPackagesPage = path === "/app/packages"
   const isCreatePackagePage = path === "/app/packages/create"
 
@@ -70,7 +71,7 @@ export default function Header({ setSidebarOpen }) {
       {/* ================= RIGHT ================= */}
       <div className="ml-auto flex items-center gap-6">
 
-        {isSessionsPage && <Filter onChange={() => {}} />}
+        {(isSessionsPage || isFinancePage)  && <Filter onChange={() => {}} />}
 
         {isPackagesPage && (
           <CreateButton

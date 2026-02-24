@@ -1,4 +1,4 @@
-import Filter from "../../components/sessions/Filter";
+import Filter from "../../components/Filter";
 import Table from "../../components/sessions/Table";
 import InfoCards from "../../components/sessions/InfoCards";
 import { useSessions } from "../../modules/sessions/domain/useSessions";

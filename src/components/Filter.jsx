@@ -13,6 +13,7 @@ export default function Filter({ onChange }) {
 
   const ref = useRef(null)
 
+  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
@@ -23,9 +24,10 @@ export default function Filter({ onChange }) {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
+  // Notify parent (Header → AppLayout → Pages)
   useEffect(() => {
-    onChange({ activeFilter, range })
-  }, [activeFilter, range])
+    onChange?.({ activeFilter, range })
+  }, [activeFilter, range, onChange])
 
   const label = useMemo(() => {
     if (activeFilter === "today") return "Today"
@@ -90,7 +92,7 @@ export default function Filter({ onChange }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 bg-gray-800 border border-white/10 rounded-lg px-4 py-2 text-sm text-white hover:bg-gray-700"
+        className="flex items-center gap-2 bg-gray-800 border border-white/10 rounded-lg px-4 py-2 text-sm text-white hover:bg-gray-700 transition"
       >
         <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
         {label}
@@ -98,6 +100,7 @@ export default function Filter({ onChange }) {
 
       {open && (
         <div className="absolute right-0 top-14 z-50 bg-[#0f172a] border border-white/10 rounded-2xl p-6 w-[850px] shadow-2xl flex gap-8">
+          
           {/* CALENDAR */}
           <div className="flex gap-12">
             {months.map((m, idx) => (
