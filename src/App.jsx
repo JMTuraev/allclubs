@@ -21,7 +21,7 @@ import Login from "./pages/Login"
 import CreateClub from "./pages/CreateClub"
 
 /* ================= DASHBOARD ================= */
-import Dashboard from "./pages/Dashboard"
+import Dashboard from "./pages/dashboard/Dashboard"
 import PackageList from "./pages/packages/PackageList"
 import CreatePackage from "./pages/packages/CreatePackage"
 import StaffList from "./pages/StaffList"

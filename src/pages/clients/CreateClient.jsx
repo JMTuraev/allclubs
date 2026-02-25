@@ -32,31 +32,23 @@ export default function CreateClient() {
 
   const handleImage = (e) => {
     const file = e.target.files[0]
-    if (file) setPreview(URL.createObjectURL(file))
+    if (file) {
+      setPreview(URL.createObjectURL(file))
+    }
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    const newClient = {
-      id: Date.now(),
-      name: `${form.firstName} ${form.lastName}`.trim(),
-      phone: form.phone,
+    addClient({
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      phone: form.phone.trim(),
       gender: form.gender,
       age: null,
-      joined: new Date().toISOString(),
       image: preview || null,
-      online: false,
-      locker: null,
-      lifetimeSpent: 0,
-      lastAction: "New client",
-      type: "lead",
-      note: form.note,
-      package: null,
-      sessions: [],
-    }
-
-    addClient(newClient)
+      note: form.note.trim(),
+    })
 
     navigate("/app/clients")
   }
@@ -65,6 +57,7 @@ export default function CreateClient() {
     <div className="px-6 pt-4 pb-6">
       <div className="max-w-3xl mx-auto bg-gray-900 border border-white/10 rounded-2xl shadow-lg">
         <form onSubmit={handleSubmit}>
+
           {/* Avatar */}
           <div className="flex flex-col items-center py-5 border-b border-white/10">
             {preview ? (
@@ -93,6 +86,7 @@ export default function CreateClient() {
           {/* Body */}
           <div className="p-6 space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
               <div>
                 <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                   <UserIcon className="h-4 w-4" />
@@ -153,6 +147,7 @@ export default function CreateClient() {
                   <option value="female">Female</option>
                 </select>
               </div>
+
             </div>
 
             <div>
@@ -168,6 +163,7 @@ export default function CreateClient() {
                 className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+
           </div>
 
           {/* Actions */}
@@ -187,6 +183,7 @@ export default function CreateClient() {
               Save
             </button>
           </div>
+
         </form>
       </div>
     </div>

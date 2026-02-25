@@ -9,14 +9,21 @@ import {
   ArrowLeftIcon,
 } from "@heroicons/react/20/solid"
 
-import { useLocation, useNavigate } from "react-router-dom"
+import {
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom"
+
 import Filter from "./Filter"
 
 export default function Header({ setSidebarOpen }) {
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const path = location.pathname
+  const urlDate = searchParams.get("date")
 
   const isSessionsPage = path === "/app/sessions"
   const isFinancePage = path === "/app/finance"
@@ -35,6 +42,20 @@ export default function Header({ setSidebarOpen }) {
     const url = window.location.origin + "/bar"
     window.open(url, "_blank", "noopener,noreferrer")
   }
+
+  /* ================= FORMAT DATE ================= */
+
+  const formattedDate = (() => {
+    if (!urlDate) return null
+
+    const d = new Date(urlDate)
+
+    return d.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+  })()
 
   return (
     <div className="sticky top-0 z-40 flex h-16 items-center border-b border-white/10 bg-gray-900 px-6">
@@ -71,7 +92,18 @@ export default function Header({ setSidebarOpen }) {
       {/* ================= RIGHT ================= */}
       <div className="ml-auto flex items-center gap-6">
 
-        {(isSessionsPage || isFinancePage)  && <Filter onChange={() => {}} />}
+        {/* FILTER ZONE */}
+        {(isSessionsPage || isFinancePage) && (
+          <>
+            {formattedDate ? (
+              <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm">
+                {formattedDate}
+              </div>
+            ) : (
+              <Filter onChange={() => {}} />
+            )}
+          </>
+        )}
 
         {isPackagesPage && (
           <CreateButton
@@ -97,7 +129,7 @@ export default function Header({ setSidebarOpen }) {
           />
         )}
 
-        {/* 🔥 BAR NEW TAB */}
+        {/* BAR NEW TAB */}
         <button
           onClick={openBar}
           className="flex items-center justify-center h-9 w-9 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition"

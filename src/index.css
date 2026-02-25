@@ -4,20 +4,12 @@
 
 html, body, #root {
   height: 100%;
-  overflow: hidden;
   background-color: #111827; /* gray-900 */
 }
 
-.apexcharts-canvas {
-  pointer-events: auto;
-}
-
-.apexcharts-tooltip {
-  pointer-events: none;
-}
-
-.apexcharts-svg title {
-  display: none !important;
+/* Page scroll ishlashi uchun */
+body {
+  overflow-y: auto;
 }
 
 /* DARK THIN SCROLLBAR */
@@ -31,7 +23,7 @@ html, body, #root {
 }
 
 .dark-scroll::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.5); /* indigo */
+  background: rgba(99, 102, 241, 0.5);
   border-radius: 9999px;
 }
 
@@ -39,7 +31,6 @@ html, body, #root {
   background: rgba(99, 102, 241, 0.8);
 }
 
-/* Firefox */
 .dark-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(99, 102, 241, 0.5) transparent;

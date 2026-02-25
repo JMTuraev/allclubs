@@ -1,238 +1,341 @@
-import { useMemo, useState } from "react"
-import { useOutletContext } from "react-router-dom"
+import { useMemo } from "react"
+import {
+  useOutletContext,
+  useSearchParams
+} from "react-router-dom"
+
 import { useTransactions } from "../../context/transaction/TransactionContext"
+import { useClientsContext } from "../../modules/clients/domain/ClientsContext"
+import { XMarkIcon } from "@heroicons/react/24/solid"
 
 export default function FinancePage() {
-  const { dateFilter } = useOutletContext()
   const { transactions } = useTransactions()
+  const { clients } = useClientsContext()
 
-  const [dailyClosings, setDailyClosings] = useState([])
-  const [lastClosedDate, setLastClosedDate] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const todayString = new Date().toLocaleDateString()
-  const isTodayClosed = lastClosedDate === todayString
+  const urlDate = searchParams.get("date")
+  const clientParam = searchParams.get("client")
+  const activeTab = searchParams.get("tab") || "overview"
 
-  // ================= FILTER =================
+  /* ================= DATE FILTER ================= */
 
-  const filteredTransactions = useMemo(() => {
-    if (!dateFilter) return transactions
+  const dateFilteredTransactions = useMemo(() => {
+    let result = [...transactions]
 
-    const { activeFilter, range } = dateFilter
-    const now = new Date()
+    if (urlDate) {
+      const selected = new Date(urlDate)
 
-    if (activeFilter === "all") return transactions
-
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    )
-
-    if (activeFilter === "today") {
-      return transactions.filter((t) => t.createdAt >= startOfToday)
-    }
-
-    if (activeFilter === "7") {
-      const past = new Date()
-      past.setDate(now.getDate() - 7)
-      return transactions.filter((t) => t.createdAt >= past)
-    }
-
-    if (activeFilter === "30") {
-      const past = new Date()
-      past.setDate(now.getDate() - 30)
-      return transactions.filter((t) => t.createdAt >= past)
-    }
-
-    if (activeFilter === "month") {
-      const startOfMonth = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        1
+      const start = new Date(
+        selected.getFullYear(),
+        selected.getMonth(),
+        selected.getDate()
       )
-      return transactions.filter((t) => t.createdAt >= startOfMonth)
-    }
 
-    if (activeFilter === "custom" && range?.from && range?.to) {
-      return transactions.filter(
+      const end = new Date(
+        selected.getFullYear(),
+        selected.getMonth(),
+        selected.getDate() + 1
+      )
+
+      result = result.filter(
         (t) =>
-          t.createdAt >= range.from &&
-          t.createdAt <= range.to
+          new Date(t.createdAt) >= start &&
+          new Date(t.createdAt) < end
       )
     }
 
-    return transactions
-  }, [transactions, dateFilter])
+    return result
+  }, [transactions, urlDate])
 
-  // ================= ACCOUNTING =================
+  /* ================= CLIENT FILTER ================= */
 
-  const totalServices = filteredTransactions
-    .filter((t) => t.type === "service")
-    .reduce((sum, t) => sum + t.amount, 0)
+  const finalTransactions = useMemo(() => {
+    if (!clientParam) return dateFilteredTransactions
 
-  const totalPayments = filteredTransactions
-    .filter((t) => t.type === "payment")
-    .reduce((sum, t) => sum + t.amount, 0)
+    return dateFilteredTransactions.filter(
+      (t) =>
+        String(t.clientId) === String(clientParam)
+    )
+  }, [dateFilteredTransactions, clientParam])
 
-  const totalExpenses = filteredTransactions
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0)
-
-  const realProfit = totalPayments - totalExpenses
-
-  // ================= CLIENT DEBT =================
+  /* ================= CLIENT BALANCES ================= */
 
   const clientBalances = useMemo(() => {
     const map = {}
 
-    filteredTransactions.forEach((t) => {
+    dateFilteredTransactions.forEach((t) => {
       if (!t.clientId) return
 
-      if (!map[t.clientId]) {
-        map[t.clientId] = { services: 0, payments: 0 }
+      const id = String(t.clientId)
+
+      if (!map[id]) {
+        map[id] = { services: 0, payments: 0 }
       }
 
-      if (t.type === "service") {
-        map[t.clientId].services += t.amount
-      }
-
-      if (t.type === "payment") {
-        map[t.clientId].payments += t.amount
-      }
+      if (t.type === "service") map[id].services += t.amount
+      if (t.type === "payment") map[id].payments += t.amount
     })
 
-    return Object.entries(map).map(([clientId, data]) => ({
-      clientId,
-      services: data.services,
-      payments: data.payments,
-      balance: data.services - data.payments,
-    }))
-  }, [filteredTransactions])
+    return Object.entries(map).map(([clientId, data]) => {
+      const client = clients.find(
+        (c) => String(c.id) === String(clientId)
+      )
 
-  const totalDebt = clientBalances.reduce(
-    (sum, c) => (c.balance > 0 ? sum + c.balance : sum),
-    0
-  )
+      return {
+        clientId,
+        client,
+        services: data.services,
+        payments: data.payments,
+        balance: data.services - data.payments
+      }
+    })
+  }, [dateFilteredTransactions, clients])
 
-  // ================= DAILY CLOSING =================
+  /* ================= HANDLERS ================= */
 
-  const handleCloseDay = () => {
-    if (isTodayClosed) return
-
-    const closingData = {
-      id: Date.now(),
-      date: todayString,
-      services: totalServices,
-      payments: totalPayments,
-      expenses: totalExpenses,
-      debt: totalDebt,
-      profit: realProfit,
-      closedAt: new Date(),
-    }
-
-    setDailyClosings((prev) => [closingData, ...prev])
-    setLastClosedDate(todayString)
+  const changeTab = (tab) => {
+    const params = new URLSearchParams(searchParams)
+    params.set("tab", tab)
+    setSearchParams(params)
   }
 
+  const handleClientClick = (clientId) => {
+    const params = new URLSearchParams(searchParams)
+    params.set("tab", "transactions")
+    params.set("client", clientId)
+    setSearchParams(params)
+  }
+
+  const clearClientFilter = () => {
+    const params = new URLSearchParams(searchParams)
+    params.delete("client")
+    setSearchParams(params)
+  }
+
+  const filteredClient = clients.find(
+    (c) => String(c.id) === String(clientParam)
+  )
+
+  /* ================= RENDER ================= */
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
 
-      {/* ================= SUMMARY ================= */}
-
-      <div className="grid grid-cols-4 gap-6">
-        <GlassCard title="Services Sold" value={totalServices} color="indigo" />
-        <GlassCard title="Payments Received" value={totalPayments} color="emerald" />
-        <GlassCard title="Outstanding Debt" value={totalDebt} color="amber" />
-        <GlassCard title="Real Profit" value={realProfit} color="cyan" />
-      </div>
-
-      {/* Close Day Button */}
-
-      <div className="flex justify-end">
-        <button
-          onClick={handleCloseDay}
-          disabled={isTodayClosed}
-          className={`px-6 py-3 rounded-xl font-semibold ${
-            isTodayClosed
-              ? "bg-gray-700 cursor-not-allowed"
-              : "bg-emerald-600 hover:bg-emerald-500"
-          }`}
+      {/* ===== TABS ===== */}
+      <div className="flex gap-8 border-b border-white/10">
+        <TabButton
+          active={activeTab === "overview"}
+          onClick={() => changeTab("overview")}
         >
-          {isTodayClosed ? "Day Closed" : "Close Day"}
-        </button>
+          Overview
+        </TabButton>
+
+        <TabButton
+          active={activeTab === "transactions"}
+          onClick={() => changeTab("transactions")}
+        >
+          Transactions
+        </TabButton>
       </div>
 
-      {/* ================= CLIENT BALANCE TABLE ================= */}
+      {/* ================= OVERVIEW ================= */}
+      {activeTab === "overview" && (
+        <Card title="Client Balances">
+          {clientBalances.length === 0 ? (
+            <div className="text-gray-500 p-6 text-center">
+              No client activity
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-gray-400">
+                <tr>
+                  <th className="p-3 text-left">Client</th>
+                  <th className="p-3 text-right">Services</th>
+                  <th className="p-3 text-right">Payments</th>
+                  <th className="p-3 text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientBalances.map((c) => (
+                  <tr
+                    key={c.clientId}
+                    className="border-t border-white/5"
+                  >
+                    <td className="p-3">
+                      {c.client ? (
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={c.client.image}
+                            className="h-10 w-10 rounded-full object-cover"
+                            alt=""
+                          />
 
-      <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden">
-        <div className="p-6 border-b border-white/10">
-          <h2 className="text-lg font-semibold text-white">
-            Client Balances
-          </h2>
-        </div>
+                          <div>
+                            <button
+                              onClick={() =>
+                                handleClientClick(c.clientId)
+                              }
+                              className="text-indigo-400 hover:underline font-semibold"
+                            >
+                              {c.client.firstName} {c.client.lastName}
+                            </button>
 
-        <table className="w-full text-sm">
-          <thead className="bg-white/5 text-gray-400">
-            <tr>
-              <th className="p-4 text-left">Client</th>
-              <th className="p-4 text-right">Services</th>
-              <th className="p-4 text-right">Payments</th>
-              <th className="p-4 text-right">Balance</th>
-            </tr>
-          </thead>
+                            <div className="text-xs text-gray-400">
+                              ID: {c.client.id}
+                            </div>
 
-          <tbody>
-            {clientBalances.length === 0 && (
-              <tr>
-                <td colSpan="4" className="p-10 text-center text-gray-500">
-                  No client transactions
-                </td>
-              </tr>
+                            <div className="text-xs text-gray-500">
+                              {c.client.phone}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        "Unknown"
+                      )}
+                    </td>
+
+                    <td className="p-3 text-right text-red-400">
+                      {c.services.toLocaleString()} сум
+                    </td>
+
+                    <td className="p-3 text-right text-emerald-400">
+                      {c.payments.toLocaleString()} сум
+                    </td>
+
+                    <td className="p-3 text-right font-semibold text-white">
+                      {c.balance.toLocaleString()} сум
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
+      {/* ================= TRANSACTIONS ================= */}
+      {activeTab === "transactions" && (
+        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden">
+
+          {/* HEADER */}
+          <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold">
+                Transactions
+              </h2>
+
+              {clientParam && filteredClient && (
+                <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs px-3 py-1 rounded-full">
+                  <span>
+                    {filteredClient.firstName} {filteredClient.lastName}
+                  </span>
+
+                  <button
+                    onClick={clearClientFilter}
+                    className="hover:text-white transition"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* TABLE */}
+          <div className="p-6">
+            {finalTransactions.length === 0 ? (
+              <div className="text-gray-500 text-center py-8">
+                No transactions found
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-gray-400">
+                  <tr>
+                    <th className="p-3 text-left">Date</th>
+                    <th className="p-3 text-left">Client</th>
+                    <th className="p-3 text-left">Type</th>
+                    <th className="p-3 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {finalTransactions.map((t, i) => {
+                    const client = clients.find(
+                      (c) =>
+                        String(c.id) === String(t.clientId)
+                    )
+
+                    return (
+                      <tr
+                        key={`${t.id}-${i}`}
+                        className="border-t border-white/5"
+                      >
+                        <td className="p-3">
+                          {new Date(
+                            t.createdAt
+                          ).toLocaleDateString()}
+                        </td>
+
+                        <td className="p-3">
+                          {client
+                            ? `${client.firstName} ${client.lastName}`
+                            : "Unknown"}
+                        </td>
+
+                        <td className="p-3">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              t.type === "payment"
+                                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                : "bg-red-500/15 text-red-400 border border-red-500/30"
+                            }`}
+                          >
+                            {t.type}
+                          </span>
+                        </td>
+
+                        <td className="p-3 text-right font-semibold text-white">
+                          {t.amount.toLocaleString()} сум
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             )}
+          </div>
 
-            {clientBalances.map((c) => (
-              <tr
-                key={c.clientId}
-                className="border-t border-white/5 hover:bg-white/5 transition"
-              >
-                <td className="p-4 text-gray-300">{c.clientId}</td>
-                <td className="p-4 text-right text-indigo-400">{c.services}</td>
-                <td className="p-4 text-right text-emerald-400">{c.payments}</td>
-                <td
-                  className={`p-4 text-right font-semibold ${
-                    c.balance > 0
-                      ? "text-amber-400"
-                      : c.balance < 0
-                      ? "text-cyan-400"
-                      : "text-emerald-400"
-                  }`}
-                >
-                  {c.balance}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        </div>
+      )}
 
     </div>
   )
 }
 
-function GlassCard({ title, value, color }) {
-  const colors = {
-    indigo: "text-indigo-400",
-    emerald: "text-emerald-400",
-    amber: "text-amber-400",
-    cyan: "text-cyan-400",
-  }
+/* UI COMPONENTS */
 
+function TabButton({ children, active, onClick }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-xl">
-      <p className="text-sm text-gray-400 mb-1">{title}</p>
-      <p className={`text-2xl font-semibold ${colors[color]}`}>
-        {value}
-      </p>
+    <button
+      onClick={onClick}
+      className={`pb-3 text-sm font-semibold transition ${
+        active
+          ? "text-indigo-400 border-b-2 border-indigo-500"
+          : "text-gray-400 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Card({ title, children }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden">
+      <div className="p-6 border-b border-white/10">
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
+      <div className="p-6">{children}</div>
     </div>
   )
 }

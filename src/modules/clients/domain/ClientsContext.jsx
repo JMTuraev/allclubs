@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from "react"
 
-const ClientsContext = createContext()
+const ClientsContext = createContext(null)
 
 export function ClientsProvider({ children }) {
   const [clients, setClients] = useState([
@@ -13,11 +13,8 @@ export function ClientsProvider({ children }) {
       age: 27,
       image:
         "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=256&q=80",
-
-      type: "member", // lead | member
-
+      type: "member",
       lifetimeSpent: 1250000,
-
       package: {
         id: "pkg_1",
         name: "1 Month",
@@ -28,7 +25,6 @@ export function ClientsProvider({ children }) {
         startedAt: "2026-02-01",
         expiresAt: "2026-03-01",
       },
-
       createdAt: "2026-02-01",
     },
   ])
@@ -36,7 +32,7 @@ export function ClientsProvider({ children }) {
   /* ================= QUERIES ================= */
 
   const getClientById = (id) =>
-    clients.find((c) => c.id === Number(id))
+    clients.find((c) => String(c.id) === String(id))
 
   const getActiveClients = () => clients
 
@@ -58,7 +54,9 @@ export function ClientsProvider({ children }) {
   const updateClient = (id, updates) =>
     setClients((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, ...updates } : c
+        String(c.id) === String(id)
+          ? { ...c, ...updates }
+          : c
       )
     )
 
@@ -71,7 +69,7 @@ export function ClientsProvider({ children }) {
 
     setClients((prev) =>
       prev.map((c) =>
-        c.id === id
+        String(c.id) === String(id)
           ? {
               ...c,
               type: "member",
@@ -110,5 +108,13 @@ export function ClientsProvider({ children }) {
 }
 
 export function useClientsContext() {
-  return useContext(ClientsContext)
+  const context = useContext(ClientsContext)
+
+  if (!context) {
+    throw new Error(
+      "useClientsContext must be used inside ClientsProvider"
+    )
+  }
+
+  return context
 }
