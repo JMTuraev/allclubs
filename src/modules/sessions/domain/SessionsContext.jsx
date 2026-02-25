@@ -1,117 +1,91 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useReducer, useMemo } from "react"
+import { v4 as uuid } from "uuid"
 
 const SessionsContext = createContext()
 
+/* ================= REDUCER ================= */
+
+function reducer(state, action) {
+  switch (action.type) {
+    case "START_SESSION":
+      return [action.payload, ...state]
+
+    case "END_SESSION":
+      return state.map(s =>
+        s.id === action.payload
+          ? { ...s, status: "closed", endedAt: new Date().toISOString() }
+          : s
+      )
+
+    case "ADD_TRANSACTION":
+      return state.map(s =>
+        s.id === action.payload.sessionId
+          ? {
+              ...s,
+              transactions: [...s.transactions, action.payload.tx],
+              totalAmount:
+                (s.totalAmount || 0) + action.payload.tx.amount
+            }
+          : s
+      )
+
+    default:
+      return state
+  }
+}
+
+/* ================= PROVIDER ================= */
+
 export function SessionsProvider({ children }) {
-  const [sessions, setSessions] = useState([])
+  const [sessions, dispatch] = useReducer(reducer, [])
 
-  /* ================= QUERIES ================= */
+  /* COMMANDS */
 
-  const getSessionsByClient = (clientId) =>
-    sessions.filter((s) => s.clientId === Number(clientId))
-
-  const getActiveSessionByClient = (clientId) =>
-    sessions.find(
-      (s) =>
-        s.clientId === Number(clientId) &&
-        s.status === "active"
-    )
-
-  const getUnpaidSessionsByClient = (clientId) =>
-    sessions.filter(
-      (s) =>
-        s.clientId === Number(clientId) &&
-        !s.paid
-    )
-
-  const getUnpaidTotalByClient = (clientId) =>
-    getUnpaidSessionsByClient(clientId).reduce(
-      (sum, s) => sum + (s.amount || 0),
-      0
-    )
-
-  /* ================= COMMANDS ================= */
-
-  const startSession = ({
-    clientId,
-    lockerCode,
-    keyCode,
-    keyType = "manual",
-    accessType = "package",
-    amount = 0,
-  }) => {
-    // active session mavjudmi?
-    const active = getActiveSessionByClient(clientId)
-    if (active) return false
-
+  const startSession = ({ clientId, clientName, staffName }) => {
     const newSession = {
-      id: Date.now(),
-      clientId: Number(clientId),
-
-      lockerCode,
-      keyCode,
-      keyType,
-
-      accessType, // package | oneday
-      amount,
+      id: uuid(),
+      clientId,
+      clientName,
+      staffName,
 
       startedAt: new Date().toISOString(),
       endedAt: null,
 
       status: "active",
-      paid: amount === 0, // package bo‘lsa true, oneday bo‘lsa false
-      paymentId: null,
+      transactions: [],
+      totalAmount: 0,
     }
 
-    setSessions((prev) => [...prev, newSession])
-    return true
+    dispatch({ type: "START_SESSION", payload: newSession })
+    return newSession
   }
 
-  const closeSessionByKey = (keyCode) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.keyCode === keyCode && s.status === "active"
-          ? {
-              ...s,
-              status: "closed",
-              endedAt: new Date().toISOString(),
-            }
-          : s
-      )
-    )
+  const endSession = (id) => {
+    dispatch({ type: "END_SESSION", payload: id })
   }
 
-  const markSessionsPaid = (sessionIds, paymentId) => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        sessionIds.includes(s.id)
-          ? {
-              ...s,
-              paid: true,
-              paymentId,
-            }
-          : s
-      )
-    )
+  const addTransaction = (sessionId, tx) => {
+    const newTx = {
+      id: uuid(),
+      createdAt: new Date().toISOString(),
+      ...tx,
+    }
+
+    dispatch({
+      type: "ADD_TRANSACTION",
+      payload: { sessionId, tx: newTx }
+    })
   }
+
+  const value = useMemo(() => ({
+    sessions,
+    startSession,
+    endSession,
+    addTransaction
+  }), [sessions])
 
   return (
-    <SessionsContext.Provider
-      value={{
-        sessions,
-
-        /* queries */
-        getSessionsByClient,
-        getActiveSessionByClient,
-        getUnpaidSessionsByClient,
-        getUnpaidTotalByClient,
-
-        /* commands */
-        startSession,
-        closeSessionByKey,
-        markSessionsPaid,
-      }}
-    >
+    <SessionsContext.Provider value={value}>
       {children}
     </SessionsContext.Provider>
   )

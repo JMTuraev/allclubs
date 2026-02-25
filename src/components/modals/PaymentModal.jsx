@@ -7,13 +7,13 @@ import {
 } from "@heroicons/react/24/solid";
 
 export default function PaymentModal({
-  total = 0,              // ✅ default qo‘shildi
+  total = 0,
   client,
   checkNumber,
   onClose,
   onConfirm
 }) {
-  const safeTotal = Number(total) || 0;   // ✅ crash proof
+  const safeTotal = Number(total) || 0;
 
   const [activeMethod, setActiveMethod] = useState(null);
   const [amounts, setAmounts] = useState({
@@ -33,13 +33,13 @@ export default function PaymentModal({
     );
   }, [amounts]);
 
-  const remaining = safeTotal - paid;   // ✅ total o‘rniga safeTotal
+  const remaining = safeTotal - paid;
   const isDebtUsed = amounts.debt > 0;
 
   const isValid =
-    Math.abs(remaining) < 0.01 &&       // ✅ float-safe
+    Math.abs(remaining) < 0.01 &&
     safeTotal > 0 &&
-    activeMethod !== null &&            // ✅ method tanlangan bo‘lishi shart
+    activeMethod !== null &&
     (!isDebtUsed || comment.trim().length > 0);
 
   /* ================= ACTIVATE METHOD ================= */
@@ -86,7 +86,7 @@ export default function PaymentModal({
     });
   };
 
-  /* ================= UI CONFIG ================= */
+  /* ================= METHODS ================= */
 
   const methods = [
     {
@@ -115,6 +115,19 @@ export default function PaymentModal({
     }
   ];
 
+  /* ================= CONFIRM ================= */
+
+  const handleConfirm = () => {
+    onConfirm({
+      amounts,
+      comment,
+      method: activeMethod,
+      total: safeTotal
+    });
+
+    onClose(); // 🔥 modal yopiladi
+  };
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-[#111827] w-[460px] rounded-2xl p-6 space-y-5 shadow-2xl">
@@ -135,7 +148,7 @@ export default function PaymentModal({
         <div className="text-sm">
           Total:{" "}
           <span className="font-semibold">
-            {safeTotal.toLocaleString()} so'm   {/* ✅ crash yo‘q */}
+            {safeTotal.toLocaleString()} so'm
           </span>
         </div>
 
@@ -212,12 +225,7 @@ export default function PaymentModal({
 
           <button
             disabled={!isValid}
-            onClick={() =>
-              onConfirm({
-                methods: amounts,
-                comment
-              })
-            }
+            onClick={handleConfirm}
             className={`px-4 py-2 rounded-lg font-medium transition ${
               isValid
                 ? "bg-emerald-600 hover:bg-emerald-500"

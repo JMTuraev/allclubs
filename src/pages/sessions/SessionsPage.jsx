@@ -1,31 +1,5 @@
-import Filter from "../../components/Filter";
-import Table from "../../components/sessions/Table";
-import InfoCards from "../../components/sessions/InfoCards";
-import { useSessions } from "../../modules/sessions/domain/useSessions";
+import SessionsPageFeature from "../../modules/sessions/SessionsPage"
 
 export default function SessionsPage() {
-
-  const {
-    sessions,
-    totalRevenue,
-    activeCount,
-    endedCount
-  } = useSessions();
-
-  return (
-    <div className="px-6 lg:px-8 space-y-8">
-
-      {/* INFO CARDS */}
-      <InfoCards
-        sessions={sessions}
-        totalRevenue={totalRevenue}
-        activeCount={activeCount}
-        endedCount={endedCount}
-      />
-
-      {/* TABLE */}
-      <Table sessions={sessions} />
-
-    </div>
-  );
-} 
+  return <SessionsPageFeature />
+}

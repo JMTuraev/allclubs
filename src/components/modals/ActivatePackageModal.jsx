@@ -18,8 +18,27 @@ export default function ActivatePackageModal({
   const [showPayment, setShowPayment] = useState(false)
 
   const selectedClient = clients.find(
-    (c) => c.id === Number(selectedClientId)
+    (c) => String(c.id) === String(selectedClientId)
   )
+
+  /* ================= PAYMENT CONFIRM ================= */
+
+  const handlePaymentConfirm = (paymentData) => {
+    if (!selectedClient) return
+
+    const { amounts, comment, method, total } = paymentData
+
+    // 🔥 bu yerda agar xohlasang finance transaction yozish mumkin
+    console.log("Payment:", amounts)
+    console.log("Method:", method)
+    console.log("Comment:", comment)
+    console.log("Total:", total)
+
+    assignPackage(selectedClient.id, pkg)
+
+    setShowPayment(false)
+    onClose()
+  }
 
   return (
     <>
@@ -89,12 +108,9 @@ export default function ActivatePackageModal({
       {showPayment && (
         <PaymentModal
           total={pkg.price}
+          client={selectedClient}
           onClose={() => setShowPayment(false)}
-          onConfirm={() => {
-            assignPackage(selectedClient.id, pkg)
-            setShowPayment(false)
-            onClose()
-          }}
+          onConfirm={handlePaymentConfirm}
         />
       )}
     </>

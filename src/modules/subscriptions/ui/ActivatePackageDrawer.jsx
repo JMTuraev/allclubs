@@ -2,15 +2,16 @@ import { useState } from "react"
 import { XMarkIcon } from "@heroicons/react/24/outline"
 import { usePackages } from "../../packages/domain/PackagesContext"
 import { useTransactions } from "../../../context/transaction/TransactionContext"
+import { useSubscriptionsContext } from "../domain/SubscriptionsContext"
 import PaymentModal from "../../../components/modals/PaymentModal"
 
 export default function ActivatePackageDrawer({
   client,
   onClose,
-  onConfirm,
 }) {
   const { packages } = usePackages()
   const { addTransaction } = useTransactions()
+  const { activateSubscription } = useSubscriptionsContext()
 
   const [selected, setSelected] = useState(null)
   const [showPayment, setShowPayment] = useState(false)
@@ -27,14 +28,11 @@ export default function ActivatePackageDrawer({
     <>
       {/* DRAWER */}
       <div className="fixed inset-0 z-50 flex">
-
-        {/* Overlay */}
         <div
           className="flex-1 bg-black/40 backdrop-blur-sm"
           onClick={onClose}
         />
 
-        {/* Drawer */}
         <div className="w-[440px] bg-[#0F172A] border-l border-white/10 p-6 flex flex-col">
 
           {/* Header */}
@@ -127,7 +125,7 @@ export default function ActivatePackageDrawer({
           onClose={() => setShowPayment(false)}
           onConfirm={(paymentData) => {
 
-            setShowPayment(false)
+            const { amounts, comment } = paymentData
 
             const startDate = today
             const endDate = new Date(
@@ -135,8 +133,7 @@ export default function ActivatePackageDrawer({
               selected.duration * 24 * 60 * 60 * 1000
             )
 
-            /* ================= 1️⃣ SERVICE TRANSACTION ================= */
-
+            /* 1️⃣ SERVICE TRANSACTION */
             addTransaction({
               type: "service",
               category: "package",
@@ -150,9 +147,8 @@ export default function ActivatePackageDrawer({
               },
             })
 
-            /* ================= 2️⃣ PAYMENT TRANSACTIONS ================= */
-
-            Object.entries(paymentData.methods).forEach(
+            /* 2️⃣ PAYMENT TRANSACTIONS */
+            Object.entries(amounts).forEach(
               ([method, amount]) => {
                 if (Number(amount) > 0) {
                   addTransaction({
@@ -161,21 +157,22 @@ export default function ActivatePackageDrawer({
                     clientId: client.id,
                     amount: Number(amount),
                     paymentMethod: method,
-                    comment: paymentData.comment,
+                    comment,
                   })
                 }
               }
             )
 
-            /* ================= PACKAGE ACTIVATE ================= */
-
-            onConfirm({
-              package: selected,
-              payment: paymentData,
-              startDate,
-              endDate,
-            })
-
+            /* 🔥 3️⃣ ACTIVATE SUBSCRIPTION */
+           activateSubscription({
+  clientId: client.id,
+  packageData: {
+    ...selected,
+    visits: selected.visits || selected.sessions || 30
+  },
+  paymentId: Date.now(),
+})
+            setShowPayment(false)
             onClose()
           }}
         />
