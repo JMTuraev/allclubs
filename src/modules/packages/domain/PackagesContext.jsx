@@ -8,8 +8,13 @@ export function PackagesProvider({ children }) {
       id: 1,
       name: "1 месяц",
       duration: 30,
-      price: 300000,
       bonusDays: 0,
+      price: 300000,
+
+      // NEW MODEL
+      isUnlimited: true,
+      visitLimit: null, // null = unlimited
+
       startTime: null,
       endTime: null,
       freezeEnabled: false,
@@ -17,7 +22,6 @@ export function PackagesProvider({ children }) {
       gender: "all",
       description: "Полный доступ ко всем тренировкам клуба.",
       gradient: "from-indigo-500 to-indigo-700",
-      type: "Безлимит",
     },
   ])
 

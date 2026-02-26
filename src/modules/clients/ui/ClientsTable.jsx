@@ -1,17 +1,10 @@
 import { useState } from "react"
-import { KeyIcon } from "@heroicons/react/24/outline"
 import { useNavigate } from "react-router-dom"
 
 import { useSessionsContext } from "../../sessions/domain/SessionsContext"
 import { useSessionSelectors } from "../../sessions/domain/useSessionSelectors"
 
-import {
-  useSubscriptionsContext,
-} from "../../subscriptions/domain/SubscriptionsContext"
-
-import {
-  useSubscriptionSelectors,
-} from "../../subscriptions/domain/useSubscriptionSelectors"
+import { useSubscriptionsContext } from "../../subscriptions/domain/SubscriptionsContext"
 
 import PaymentModal from "../../../components/modals/PaymentModal"
 import KeypadModal from "../../../components/modals/KeypadModal"
@@ -21,7 +14,7 @@ export default function ClientsTable({ clients }) {
   const navigate = useNavigate()
 
   /* ===== SESSIONS ===== */
-  const { markSessionsPaid, startSession } =
+  const { markSessionsPaid, startSession, endSession } =
     useSessionsContext()
 
   const {
@@ -31,28 +24,22 @@ export default function ClientsTable({ clients }) {
   } = useSessionSelectors()
 
   /* ===== SUBSCRIPTIONS ===== */
-  const { incrementVisit } =
-    useSubscriptionsContext()
-
   const {
+    incrementVisit,
     getActiveSubscriptionByClient,
-  } = useSubscriptionSelectors()
+  } = useSubscriptionsContext()
 
   /* ===== STATE ===== */
-  const [paymentClient, setPaymentClient] =
-    useState(null)
-
-  const [keyClient, setKeyClient] =
-    useState(null)
-
-  const [activateClient, setActivateClient] =
-    useState(null)
+  const [paymentClient, setPaymentClient] = useState(null)
+  const [keyClient, setKeyClient] = useState(null)
+  const [activateClient, setActivateClient] = useState(null)
+  const [closeData, setCloseData] = useState(null)
 
   return (
     <>
       <div className="bg-gray-900 border border-white/10 rounded-2xl">
         <table className="min-w-full divide-y divide-white/10 text-sm">
-          <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase tracking-wider">
+          <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase">
             <tr>
               <th className="px-6 py-4 text-left w-16">№</th>
               <th className="px-6 py-4 text-left">Client</th>
@@ -67,33 +54,55 @@ export default function ClientsTable({ clients }) {
               const activeSession =
                 getActiveSessionByClient(client.id)
 
-              const unpaidTotal =
-                getUnpaidTotalByClient(client.id)
-
               const activeSubscription =
                 getActiveSubscriptionByClient(client.id)
 
               const hasPackage = !!activeSubscription
 
-              const visitsUsed =
-                activeSubscription?.visitsUsed ?? 0
+              let visitPercent = 0
+              let visitsUsed = 0
+              let visitsTotal = 0
+              let visitsLeft = 0
+              let isExpired = false
 
-              const visitsTotal =
-                activeSubscription?.visitsTotal ?? 0
+              if (activeSubscription) {
+                visitsUsed =
+                  activeSubscription.visitsUsed ?? 0
 
-              const visitPercent =
-                visitsTotal > 0
-                  ? (visitsUsed / visitsTotal) * 100
-                  : 0
+                visitsTotal =
+                  activeSubscription.visitsTotal ?? 0
 
-              const visitsLeft =
-                visitsTotal - visitsUsed
+                visitsLeft =
+                  visitsTotal - visitsUsed
+
+                isExpired =
+                  activeSubscription.status === "expired"
+
+                visitPercent =
+                  visitsTotal > 0
+                    ? Math.min(
+                        (visitsUsed /
+                          visitsTotal) *
+                          100,
+                        100
+                      )
+                    : 0
+              }
+
+              const sessionTotal =
+                activeSession?.totalAmount || 0
+
+              const canCheckIn =
+                hasPackage &&
+                !isExpired &&
+                visitsLeft > 0
 
               return (
                 <tr
                   key={client.id}
                   className="hover:bg-gray-800/40 transition"
                 >
+                  {/* NUMBER */}
                   <td className="px-6 py-6 text-gray-400">
                     {index + 1}
                   </td>
@@ -137,6 +146,7 @@ export default function ClientsTable({ clients }) {
                           <span className="text-gray-400">
                             {visitsUsed} / {visitsTotal}
                           </span>
+
                           <span className="text-indigo-400 ml-2">
                             {Math.round(visitPercent)}%
                           </span>
@@ -151,9 +161,9 @@ export default function ClientsTable({ clients }) {
                           />
                         </div>
 
-                        {visitsLeft <= 0 && (
+                        {isExpired && (
                           <div className="text-red-400 text-xs mt-2">
-                            Package finished
+                            Package expired
                           </div>
                         )}
                       </>
@@ -172,12 +182,18 @@ export default function ClientsTable({ clients }) {
                   {/* LOCKER */}
                   <td className="px-6 py-6">
                     {activeSession ? (
-                      <div className="flex items-center gap-2 text-green-400">
-                        <KeyIcon className="h-5 w-5" />
-                        {activeSession.lockerCode}
-                      </div>
-                    ) : hasPackage &&
-                      visitsLeft > 0 ? (
+                      <button
+                        onClick={() =>
+                          setCloseData({
+                            session: activeSession,
+                            client,
+                          })
+                        }
+                        className="px-4 py-2 text-xs bg-red-600 hover:bg-red-500 rounded-lg transition"
+                      >
+                        Close Session
+                      </button>
+                    ) : canCheckIn ? (
                       <button
                         onClick={() =>
                           setKeyClient(client)
@@ -197,23 +213,16 @@ export default function ClientsTable({ clients }) {
                   <td className="px-6 py-6">
                     <div
                       onClick={() =>
-                        unpaidTotal > 0 &&
-                        setPaymentClient(client)
+                        navigate(`/app/sessions?clientId=${client.id}`)
                       }
-                      className={`font-semibold text-sm ${
-                        unpaidTotal > 0
-                          ? "text-green-400 cursor-pointer hover:underline"
-                          : "text-gray-400"
-                      }`}
+                      className="font-semibold text-sm text-indigo-400 cursor-pointer hover:underline"
                     >
-                      {unpaidTotal.toLocaleString("ru-RU")} сум
+                      {sessionTotal.toLocaleString("ru-RU")} сум
                     </div>
 
                     <div className="text-gray-400 text-xs mt-1">
-                      {unpaidTotal > 0
-                        ? "Click to pay"
-                        : activeSession
-                        ? "Active"
+                      {activeSession
+                        ? "View session"
                         : "No activity"}
                     </div>
                   </td>
@@ -224,24 +233,23 @@ export default function ClientsTable({ clients }) {
         </table>
       </div>
 
-      {/* ACTIVATE PACKAGE */}
       {activateClient && (
         <ActivatePackageDrawer
           client={activateClient}
-          onClose={() => setActivateClient(null)}
-          onConfirm={() => {
+          onClose={() =>
             setActivateClient(null)
-          }}
+          }
         />
       )}
 
-      {/* SESSION PAYMENT */}
       {paymentClient && (
         <PaymentModal
           total={getUnpaidTotalByClient(
             paymentClient.id
           )}
-          onClose={() => setPaymentClient(null)}
+          onClose={() =>
+            setPaymentClient(null)
+          }
           onConfirm={() => {
             const unpaid =
               getUnpaidSessionsByClient(
@@ -249,8 +257,7 @@ export default function ClientsTable({ clients }) {
               )
 
             markSessionsPaid(
-              unpaid.map((s) => s.id),
-              Date.now()
+              unpaid.map((s) => s.id)
             )
 
             setPaymentClient(null)
@@ -258,11 +265,12 @@ export default function ClientsTable({ clients }) {
         />
       )}
 
-      {/* KEY → START SESSION */}
       {keyClient && (
         <KeypadModal
           mode="checkin"
-          onClose={() => setKeyClient(null)}
+          onClose={() =>
+            setKeyClient(null)
+          }
           onConfirm={(lockerCode) => {
             const activeSub =
               getActiveSubscriptionByClient(
@@ -286,6 +294,54 @@ export default function ClientsTable({ clients }) {
             setKeyClient(null)
           }}
         />
+      )}
+
+      {closeData && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-[#111827] w-[400px] rounded-2xl p-6 space-y-5 border border-white/10">
+            <div className="text-lg font-semibold">
+              Confirm Session Close
+            </div>
+
+            <div className="text-sm text-gray-400">
+              Client: {closeData.client.firstName}{" "}
+              {closeData.client.lastName}
+            </div>
+
+            <div className="text-sm">
+              Total:
+              <span className="font-semibold ml-2">
+                {closeData.session.totalAmount.toLocaleString(
+                  "ru-RU"
+                )}{" "}
+                сум
+              </span>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                onClick={() =>
+                  setCloseData(null)
+                }
+                className="px-4 py-2 bg-gray-700 rounded-lg"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => {
+                  endSession(
+                    closeData.session.id
+                  )
+                  setCloseData(null)
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"
+              >
+                Confirm Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

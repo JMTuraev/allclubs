@@ -1,8 +1,13 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { XMarkIcon } from "@heroicons/react/24/outline"
+
 import { usePackages } from "../../packages/domain/PackagesContext"
 import { useTransactions } from "../../../context/transaction/TransactionContext"
 import { useSubscriptionsContext } from "../domain/SubscriptionsContext"
+
+import { useSessionsContext } from "../../sessions/domain/SessionsContext"
+import { useSessionSelectors } from "../../sessions/domain/useSessionSelectors"
+
 import PaymentModal from "../../../components/modals/PaymentModal"
 
 export default function ActivatePackageDrawer({
@@ -10,32 +15,36 @@ export default function ActivatePackageDrawer({
   onClose,
 }) {
   const { packages } = usePackages()
-  const { addTransaction } = useTransactions()
+  const { addTransaction: addFinanceTx } = useTransactions()
   const { activateSubscription } = useSubscriptionsContext()
+
+  const { startSession, addTransaction: addSessionTx } =
+    useSessionsContext()
+
+  const { getActiveSessionByClient } =
+    useSessionSelectors()
 
   const [selected, setSelected] = useState(null)
   const [showPayment, setShowPayment] = useState(false)
+  const [processing, setProcessing] = useState(false)
 
-  const today = new Date()
-
-  const calculateExpire = (duration) => {
-    const d = new Date()
-    d.setDate(d.getDate() + duration)
-    return d.toLocaleDateString("ru-RU")
-  }
+  const checkId = useMemo(
+    () => `SUB-${Date.now()}`,
+    []
+  )
 
   return (
     <>
-      {/* DRAWER */}
       <div className="fixed inset-0 z-50 flex">
         <div
           className="flex-1 bg-black/40 backdrop-blur-sm"
-          onClick={onClose}
+          onClick={() => {
+            if (!processing) onClose()
+          }}
         />
 
         <div className="w-[440px] bg-[#0F172A] border-l border-white/10 p-6 flex flex-col">
 
-          {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-lg font-semibold text-white">
@@ -46,57 +55,47 @@ export default function ActivatePackageDrawer({
               </p>
             </div>
 
-            <button onClick={onClose}>
+            <button
+              disabled={processing}
+              onClick={onClose}
+            >
               <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-white" />
             </button>
           </div>
 
-          {/* Package List */}
           <div className="flex-1 overflow-y-auto space-y-3">
             {packages.map((pkg) => (
               <div
                 key={pkg.id}
-                onClick={() => setSelected(pkg)}
+                onClick={() =>
+                  !processing && setSelected(pkg)
+                }
                 className={`p-4 rounded-xl border cursor-pointer transition ${
                   selected?.id === pkg.id
                     ? "border-indigo-500 bg-indigo-600/10"
                     : "border-white/10 bg-white/5 hover:bg-white/10"
+                } ${
+                  processing
+                    ? "opacity-50 pointer-events-none"
+                    : ""
                 }`}
               >
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-white">
                     {pkg.name}
                   </span>
+
                   <span className="text-sm text-indigo-400">
                     {pkg.price.toLocaleString("ru-RU")} сум
                   </span>
-                </div>
-
-                <div className="text-xs text-gray-400 mt-1">
-                  {pkg.duration} дней
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Summary */}
           {selected && (
             <div className="mt-6 border-t border-white/10 pt-4 space-y-3 text-sm">
               <div className="flex justify-between text-gray-400">
-                <span>Start</span>
-                <span>
-                  {today.toLocaleDateString("ru-RU")}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-gray-400">
-                <span>Expires</span>
-                <span>
-                  {calculateExpire(selected.duration)}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-white font-semibold">
                 <span>Total</span>
                 <span>
                   {selected.price.toLocaleString("ru-RU")} сум
@@ -104,8 +103,9 @@ export default function ActivatePackageDrawer({
               </div>
 
               <button
+                disabled={processing}
                 onClick={() => setShowPayment(true)}
-                className="w-full mt-2 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition"
+                className="w-full mt-2 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition disabled:opacity-50"
               >
                 Continue to Payment
               </button>
@@ -114,66 +114,100 @@ export default function ActivatePackageDrawer({
         </div>
       </div>
 
-      {/* PAYMENT MODAL */}
+      {/* PAYMENT */}
       {showPayment && selected && (
         <PaymentModal
           total={selected.price}
           client={{
             name: `${client?.firstName} ${client?.lastName}`,
           }}
-          checkNumber={`SUB-${Date.now()}`}
-          onClose={() => setShowPayment(false)}
-          onConfirm={(paymentData) => {
+          checkNumber={checkId}
+          onClose={() => {
+            if (!processing) setShowPayment(false)
+          }}
+          onConfirm={async (paymentData) => {
+            if (processing) return
+            setProcessing(true)
 
-            const { amounts, comment } = paymentData
+            try {
+              const { amounts, comment } = paymentData
 
-            const startDate = today
-            const endDate = new Date(
-              today.getTime() +
-              selected.duration * 24 * 60 * 60 * 1000
-            )
+              /* 1️⃣ FINANCE SERVICE */
+              addFinanceTx({
+                type: "service",
+                category: "package",
+                clientId: client.id,
+                amount: selected.price,
+              })
 
-            /* 1️⃣ SERVICE TRANSACTION */
-            addTransaction({
-              type: "service",
-              category: "package",
-              clientId: client.id,
-              amount: selected.price,
-              meta: {
-                packageId: selected.id,
-                packageName: selected.name,
-                startDate,
-                endDate,
-              },
-            })
-
-            /* 2️⃣ PAYMENT TRANSACTIONS */
-            Object.entries(amounts).forEach(
-              ([method, amount]) => {
-                if (Number(amount) > 0) {
-                  addTransaction({
-                    type: "payment",
-                    category: "package",
-                    clientId: client.id,
-                    amount: Number(amount),
-                    paymentMethod: method,
-                    comment,
-                  })
+              /* 2️⃣ FINANCE PAYMENTS */
+              Object.entries(amounts).forEach(
+                ([method, amount]) => {
+                  if (Number(amount) > 0) {
+                    addFinanceTx({
+                      type: "payment",
+                      category: "package",
+                      clientId: client.id,
+                      amount: Number(amount),
+                      paymentMethod: method,
+                      comment,
+                    })
+                  }
                 }
-              }
-            )
+              )
 
-            /* 🔥 3️⃣ ACTIVATE SUBSCRIPTION */
-           activateSubscription({
-  clientId: client.id,
-  packageData: {
-    ...selected,
-    visits: selected.visits || selected.sessions || 30
-  },
-  paymentId: Date.now(),
-})
-            setShowPayment(false)
-            onClose()
+              /* 3️⃣ SESSION */
+              let activeSession =
+                getActiveSessionByClient(client.id)
+
+              if (!activeSession) {
+                activeSession = startSession({
+                  clientId: client.id,
+                  clientName:
+                    client.firstName +
+                    " " +
+                    client.lastName,
+                  staffName: "Admin",
+                })
+              }
+
+              addSessionTx(activeSession.id, {
+                category: "package",
+                name: selected.name,
+                amount: selected.price,
+              })
+
+              /* 4️⃣ SAFE VISIT CALCULATION */
+
+              let visitsValue = 0
+
+              if (selected.isUnlimited) {
+                visitsValue = 999999
+              } else {
+                visitsValue =
+                  Number(selected.visitLimit) > 0
+                    ? Number(selected.visitLimit)
+                    : 0
+              }
+
+              activateSubscription({
+                clientId: client.id,
+                packageData: {
+                  id: selected.id,
+                  name: selected.name,
+                  price: selected.price,
+                  visits: visitsValue,
+                },
+                paymentId: Date.now(),
+              })
+
+              setShowPayment(false)
+              setSelected(null)
+              onClose()
+
+            } finally {
+              setProcessing(false)
+            }
           }}
         />
       )}

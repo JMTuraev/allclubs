@@ -23,6 +23,7 @@ export default function PaymentModal({
     debt: 0,
   });
   const [comment, setComment] = useState("");
+  const [loading, setLoading] = useState(false); // 🔥 NEW
 
   /* ================= CALCULATIONS ================= */
 
@@ -45,6 +46,8 @@ export default function PaymentModal({
   /* ================= ACTIVATE METHOD ================= */
 
   const activate = (method) => {
+    if (loading) return;
+
     setActiveMethod(method);
 
     setAmounts(prev => {
@@ -69,6 +72,8 @@ export default function PaymentModal({
   /* ================= UPDATE AMOUNT ================= */
 
   const updateAmount = (method, value) => {
+    if (loading) return;
+
     const numeric = Number(value) || 0;
 
     setAmounts(prev => {
@@ -117,15 +122,23 @@ export default function PaymentModal({
 
   /* ================= CONFIRM ================= */
 
-  const handleConfirm = () => {
-    onConfirm({
-      amounts,
-      comment,
-      method: activeMethod,
-      total: safeTotal
-    });
+  const handleConfirm = async () => {
+    if (!isValid || loading) return;
 
-    onClose(); // 🔥 modal yopiladi
+    setLoading(true);
+
+    try {
+      await onConfirm({
+        amounts,
+        comment,
+        method: activeMethod,
+        total: safeTotal
+      });
+
+      onClose(); // 🔥 modal yopiladi faqat 1 marta
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -157,13 +170,14 @@ export default function PaymentModal({
           {methods.map((m) => (
             <div key={m.key} className="flex items-center gap-3">
               <button
+                disabled={loading}
                 onClick={() => activate(m.key)}
                 className={`flex items-center justify-center gap-2 w-32 py-2 rounded-lg text-sm font-medium transition 
                 ${
                   activeMethod === m.key
                     ? `bg-gradient-to-r ${m.gradient}`
                     : "bg-white/10 hover:bg-white/20"
-                }`}
+                } ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 {m.icon}
                 {m.label}
@@ -171,7 +185,7 @@ export default function PaymentModal({
 
               <input
                 type="number"
-                disabled={activeMethod !== m.key}
+                disabled={activeMethod !== m.key || loading}
                 value={amounts[m.key]}
                 onChange={(e) =>
                   updateAmount(m.key, e.target.value)
@@ -190,6 +204,7 @@ export default function PaymentModal({
               : "Comment (optional)"
           }
           value={comment}
+          disabled={loading}
           onChange={(e) =>
             setComment(e.target.value)
           }
@@ -218,21 +233,22 @@ export default function PaymentModal({
         <div className="flex justify-end gap-3 pt-3">
           <button
             onClick={onClose}
+            disabled={loading}
             className="px-4 py-2 bg-white/10 rounded-lg"
           >
             Cancel
           </button>
 
           <button
-            disabled={!isValid}
+            disabled={!isValid || loading}
             onClick={handleConfirm}
             className={`px-4 py-2 rounded-lg font-medium transition ${
-              isValid
+              isValid && !loading
                 ? "bg-emerald-600 hover:bg-emerald-500"
                 : "bg-gray-600 cursor-not-allowed"
             }`}
           >
-            Confirm
+            {loading ? "Processing..." : "Confirm"}
           </button>
         </div>
 

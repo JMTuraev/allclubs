@@ -3,17 +3,34 @@ import { v4 as uuid } from "uuid"
 
 const SessionsContext = createContext()
 
-/* ================= REDUCER ================= */
+function calculateDuration(startedAt) {
+  const start = new Date(startedAt)
+  const end = new Date()
+  return Math.floor((end - start) / 60000)
+}
 
 function reducer(state, action) {
   switch (action.type) {
+
     case "START_SESSION":
       return [action.payload, ...state]
 
     case "END_SESSION":
       return state.map(s =>
         s.id === action.payload
-          ? { ...s, status: "closed", endedAt: new Date().toISOString() }
+          ? {
+              ...s,
+              status: "closed",
+              endedAt: new Date().toISOString(),
+              durationMinutes: calculateDuration(s.startedAt),
+            }
+          : s
+      )
+
+    case "MARK_PAID":
+      return state.map(s =>
+        action.payload.includes(s.id)
+          ? { ...s, paid: true }
           : s
       )
 
@@ -24,7 +41,8 @@ function reducer(state, action) {
               ...s,
               transactions: [...s.transactions, action.payload.tx],
               totalAmount:
-                (s.totalAmount || 0) + action.payload.tx.amount
+                (s.totalAmount || 0) +
+                action.payload.tx.amount
             }
           : s
       )
@@ -34,26 +52,31 @@ function reducer(state, action) {
   }
 }
 
-/* ================= PROVIDER ================= */
-
 export function SessionsProvider({ children }) {
   const [sessions, dispatch] = useReducer(reducer, [])
 
-  /* COMMANDS */
-
-  const startSession = ({ clientId, clientName, staffName }) => {
+  const startSession = ({
+    clientId,
+    clientName,
+    staffName,
+    lockerCode,
+  }) => {
     const newSession = {
       id: uuid(),
       clientId,
       clientName,
       staffName,
+      lockerCode,
 
       startedAt: new Date().toISOString(),
       endedAt: null,
 
       status: "active",
+      paid: false,
+
       transactions: [],
       totalAmount: 0,
+      durationMinutes: 0,
     }
 
     dispatch({ type: "START_SESSION", payload: newSession })
@@ -62,6 +85,10 @@ export function SessionsProvider({ children }) {
 
   const endSession = (id) => {
     dispatch({ type: "END_SESSION", payload: id })
+  }
+
+  const markSessionsPaid = (ids) => {
+    dispatch({ type: "MARK_PAID", payload: ids })
   }
 
   const addTransaction = (sessionId, tx) => {
@@ -81,7 +108,8 @@ export function SessionsProvider({ children }) {
     sessions,
     startSession,
     endSession,
-    addTransaction
+    addTransaction,
+    markSessionsPaid
   }), [sessions])
 
   return (

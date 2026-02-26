@@ -1,8 +1,10 @@
-import { useState } from "react"
 import SessionRow from "./SessionRow"
 
-export default function SessionsTable({ sessions }) {
-  const [expandedId, setExpandedId] = useState(null)
+export default function SessionsTable({
+  sessions,
+  expandedId,
+  setExpandedId,
+}) {
 
   if (!sessions.length) {
     return <EmptyState />
@@ -37,7 +39,9 @@ export default function SessionsTable({ sessions }) {
               expanded={expandedId === session.id}
               onToggle={() =>
                 setExpandedId(
-                  expandedId === session.id ? null : session.id
+                  expandedId === session.id
+                    ? null
+                    : session.id
                 )
               }
             />
@@ -51,7 +55,9 @@ export default function SessionsTable({ sessions }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center border border-white/10 rounded-xl bg-white/5">
-      <div className="text-gray-400">No sessions yet</div>
+      <div className="text-gray-400">
+        No sessions found
+      </div>
     </div>
   )
 }

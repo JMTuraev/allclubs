@@ -4,66 +4,48 @@ import { useSessionsContext } from "./SessionsContext"
 export function useSessionSelectors() {
   const { sessions } = useSessionsContext()
 
-  /* ================= BASIC ================= */
+  const activeSessions = useMemo(
+    () => sessions.filter(s => s.status === "active"),
+    [sessions]
+  )
+
+  const closedSessions = useMemo(
+    () => sessions.filter(s => s.status === "closed"),
+    [sessions]
+  )
 
   const getSessionsByClient = (clientId) =>
-    sessions.filter(
-      s => s.clientId === clientId
-    )
+    sessions.filter(s => s.clientId === clientId)
 
   const getActiveSessionByClient = (clientId) =>
-    sessions.find(
-      s =>
-        s.clientId === clientId &&
-        s.status === "active"
-    )
+    activeSessions.find(s => s.clientId === clientId)
 
   const getClosedSessionsByClient = (clientId) =>
-    sessions.filter(
-      s =>
-        s.clientId === clientId &&
-        s.status === "closed"
-    )
+    closedSessions.filter(s => s.clientId === clientId)
 
   const getTotalByClient = (clientId) =>
-    getSessionsByClient(clientId).reduce(
-      (sum, s) => sum + (s.totalAmount || 0),
-      0
-    )
-
-  /* ================= PAYMENT ================= */
+    getSessionsByClient(clientId)
+      .reduce((sum, s) => sum + (s.totalAmount || 0), 0)
 
   const getUnpaidSessionsByClient = (clientId) =>
-    sessions.filter(
-      s =>
-        s.clientId === clientId &&
-        s.status === "closed" &&
-        !s.paid
+    closedSessions.filter(
+      s => s.clientId === clientId && !s.paid
     )
 
   const getUnpaidTotalByClient = (clientId) =>
     getUnpaidSessionsByClient(clientId)
-      .reduce(
+      .reduce((sum, s) => sum + (s.totalAmount || 0), 0)
+
+  const totalActiveCount = activeSessions.length
+  const totalClosedCount = closedSessions.length
+
+  const totalRevenue = useMemo(
+    () =>
+      closedSessions.reduce(
         (sum, s) => sum + (s.totalAmount || 0),
         0
-      )
-
-  /* ================= GLOBAL METRICS ================= */
-
-  const totalActiveCount = useMemo(
-    () =>
-      sessions.filter(
-        s => s.status === "active"
-      ).length,
-    [sessions]
-  )
-
-  const totalClosedCount = useMemo(
-    () =>
-      sessions.filter(
-        s => s.status === "closed"
-      ).length,
-    [sessions]
+      ),
+    [closedSessions]
   )
 
   return {
@@ -71,11 +53,10 @@ export function useSessionSelectors() {
     getActiveSessionByClient,
     getClosedSessionsByClient,
     getTotalByClient,
-
     getUnpaidSessionsByClient,
     getUnpaidTotalByClient,
-
     totalActiveCount,
     totalClosedCount,
+    totalRevenue,
   }
 }

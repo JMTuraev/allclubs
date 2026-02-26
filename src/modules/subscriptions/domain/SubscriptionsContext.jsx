@@ -23,18 +23,16 @@ function reducer(state, action) {
       return state.map(sub => {
         if (sub.id !== action.payload) return sub
 
-        const updatedVisits = sub.visitsUsed + 1
+        const updatedVisits = (sub.visitsUsed || 0) + 1
 
-        // 🔥 visit tugasa avtomatik expired
-        const newStatus =
+        const shouldExpire =
+          sub.visitsTotal > 0 &&
           updatedVisits >= sub.visitsTotal
-            ? "expired"
-            : sub.status
 
         return {
           ...sub,
           visitsUsed: updatedVisits,
-          status: newStatus,
+          status: shouldExpire ? "expired" : sub.status,
         }
       })
 
@@ -71,23 +69,32 @@ export function SubscriptionsProvider({ children }) {
       payload: normalizedClientId,
     })
 
+    // 🔥 SAFE VISIT MAPPING
+    const visitsTotal =
+      Number(packageData?.visits) > 0
+        ? Number(packageData.visits)
+        : Number(packageData?.visitLimit) > 0
+          ? Number(packageData.visitLimit)
+          : 0
+
     const newSubscription = {
       id: uuid(),
 
       clientId: normalizedClientId,
 
-      packageId: packageData.id,
-      packageName: packageData.name,
-      price: packageData.price,
+      packageId: packageData?.id ?? null,
+      packageName: packageData?.name ?? "Unknown",
+      price: Number(packageData?.price) || 0,
 
-      visitsTotal: packageData.visits,
+      visitsTotal,
       visitsUsed: 0,
 
       startedAt: new Date().toISOString(),
       expiresAt: null,
 
-      status: "active",
-      paymentId,
+      status: visitsTotal > 0 ? "active" : "expired",
+
+      paymentId: paymentId ?? null,
     }
 
     dispatch({
@@ -116,14 +123,24 @@ export function SubscriptionsProvider({ children }) {
     })
   }
 
+  /* ================= GETTERS ================= */
+
+  const getActiveSubscriptionByClient = (clientId) => {
+    return subscriptions.find(
+      sub =>
+        String(sub.clientId) === String(clientId) &&
+        sub.status === "active"
+    )
+  }
+
   return (
     <SubscriptionsContext.Provider
       value={{
         subscriptions,
-
         activateSubscription,
         incrementVisit,
         expireSubscription,
+        getActiveSubscriptionByClient,
       }}
     >
       {children}
