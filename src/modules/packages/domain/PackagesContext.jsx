@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from "react"
 
-const PackagesContext = createContext()
+const PackagesContext = createContext(null)
 
 export function PackagesProvider({ children }) {
   const [packages, setPackages] = useState([
@@ -11,45 +11,72 @@ export function PackagesProvider({ children }) {
       bonusDays: 0,
       price: 300000,
 
-      // NEW MODEL
       isUnlimited: true,
-      visitLimit: null, // null = unlimited
+      visitLimit: null,
 
       startTime: null,
       endTime: null,
       freezeEnabled: false,
       maxFreezeDays: 0,
       gender: "all",
+
       description: "Полный доступ ко всем тренировкам клуба.",
       gradient: "from-indigo-500 to-indigo-700",
+
+      isArchived: false, // 🔥 PROFESSIONAL SOFT DELETE FLAG
+      createdAt: new Date().toISOString(),
     },
   ])
 
+  /* ================= ADD ================= */
+
   const addPackage = (pkg) => {
-    setPackages((prev) => [
+    setPackages(prev => [
       ...prev,
-      { ...pkg, id: Date.now() },
+      {
+        ...pkg,
+        id: Date.now(),
+        isArchived: false,
+        createdAt: new Date().toISOString(),
+      },
     ])
   }
 
+  /* ================= UPDATE ================= */
+
   const updatePackage = (id, updates) => {
-    setPackages((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
+    setPackages(prev =>
+      prev.map(p =>
+        p.id === id
+          ? { ...p, ...updates }
+          : p
       )
     )
   }
 
+  /* ================= SOFT DELETE ================= */
+
   const deletePackage = (id) => {
-    setPackages((prev) =>
-      prev.filter((p) => p.id !== id)
+    setPackages(prev =>
+      prev.map(p =>
+        p.id === id
+          ? { ...p, isArchived: true }
+          : p
+      )
     )
   }
+
+  /* ================= GETTERS ================= */
+
+  const activePackages = packages.filter(
+    p => !p.isArchived
+  )
 
   return (
     <PackagesContext.Provider
       value={{
-        packages,
+        packages: activePackages, // 🔥 UI faqat aktivlarni ko‘radi
+        allPackages: packages,    // 🔥 agar tarix kerak bo‘lsa
         addPackage,
         updatePackage,
         deletePackage,
@@ -61,5 +88,13 @@ export function PackagesProvider({ children }) {
 }
 
 export function usePackages() {
-  return useContext(PackagesContext)
+  const context = useContext(PackagesContext)
+
+  if (!context) {
+    throw new Error(
+      "usePackages must be used inside PackagesProvider"
+    )
+  }
+
+  return context
 }

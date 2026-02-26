@@ -5,9 +5,6 @@ import { usePackages } from "../../packages/domain/PackagesContext"
 import { useTransactions } from "../../../context/transaction/TransactionContext"
 import { useSubscriptionsContext } from "../domain/SubscriptionsContext"
 
-import { useSessionsContext } from "../../sessions/domain/SessionsContext"
-import { useSessionSelectors } from "../../sessions/domain/useSessionSelectors"
-
 import PaymentModal from "../../../components/modals/PaymentModal"
 
 export default function ActivatePackageDrawer({
@@ -17,12 +14,6 @@ export default function ActivatePackageDrawer({
   const { packages } = usePackages()
   const { addTransaction: addFinanceTx } = useTransactions()
   const { activateSubscription } = useSubscriptionsContext()
-
-  const { startSession, addTransaction: addSessionTx } =
-    useSessionsContext()
-
-  const { getActiveSessionByClient } =
-    useSessionSelectors()
 
   const [selected, setSelected] = useState(null)
   const [showPayment, setShowPayment] = useState(false)
@@ -138,6 +129,10 @@ export default function ActivatePackageDrawer({
                 category: "package",
                 clientId: client.id,
                 amount: selected.price,
+                meta: {
+                  packageId: selected.id,
+                  packageName: selected.name,
+                },
               })
 
               /* 2️⃣ FINANCE PAYMENTS */
@@ -156,48 +151,12 @@ export default function ActivatePackageDrawer({
                 }
               )
 
-              /* 3️⃣ SESSION */
-              let activeSession =
-                getActiveSessionByClient(client.id)
-
-              if (!activeSession) {
-                activeSession = startSession({
-                  clientId: client.id,
-                  clientName:
-                    client.firstName +
-                    " " +
-                    client.lastName,
-                  staffName: "Admin",
-                })
-              }
-
-              addSessionTx(activeSession.id, {
-                category: "package",
-                name: selected.name,
-                amount: selected.price,
-              })
-
-              /* 4️⃣ SAFE VISIT CALCULATION */
-
-              let visitsValue = 0
-
-              if (selected.isUnlimited) {
-                visitsValue = 999999
-              } else {
-                visitsValue =
-                  Number(selected.visitLimit) > 0
-                    ? Number(selected.visitLimit)
-                    : 0
-              }
-
+              /* 3️⃣ ACTIVATE SUBSCRIPTION
+                 🔥 TO‘LIQ PACKAGE SNAPSHOT YUBORILADI
+              */
               activateSubscription({
                 clientId: client.id,
-                packageData: {
-                  id: selected.id,
-                  name: selected.name,
-                  price: selected.price,
-                  visits: visitsValue,
-                },
+                packageData: selected, // 💎 MUHIM: qisqartirmaymiz
                 paymentId: Date.now(),
               })
 

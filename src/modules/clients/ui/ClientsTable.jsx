@@ -13,24 +13,14 @@ import ActivatePackageDrawer from "../../subscriptions/ui/ActivatePackageDrawer"
 export default function ClientsTable({ clients }) {
   const navigate = useNavigate()
 
-  /* ===== SESSIONS ===== */
-  const { markSessionsPaid, startSession, endSession } =
-    useSessionsContext()
+  const { startSession, endSession } = useSessionsContext()
+  const { getActiveSessionByClient } = useSessionSelectors()
 
   const {
-    getActiveSessionByClient,
-    getUnpaidTotalByClient,
-    getUnpaidSessionsByClient,
-  } = useSessionSelectors()
-
-  /* ===== SUBSCRIPTIONS ===== */
-  const {
-    incrementVisit,
     getActiveSubscriptionByClient,
+    incrementVisit,
   } = useSubscriptionsContext()
 
-  /* ===== STATE ===== */
-  const [paymentClient, setPaymentClient] = useState(null)
   const [keyClient, setKeyClient] = useState(null)
   const [activateClient, setActivateClient] = useState(null)
   const [closeData, setCloseData] = useState(null)
@@ -59,50 +49,97 @@ export default function ClientsTable({ clients }) {
 
               const hasPackage = !!activeSubscription
 
+              /* ================= SNAPSHOT LOGIC ================= */
+
               let visitPercent = 0
               let visitsUsed = 0
               let visitsTotal = 0
               let visitsLeft = 0
+              let daysPercent = 0
+              let daysLeft = 0
               let isExpired = false
 
               if (activeSubscription) {
+                const snapshot =
+                  activeSubscription.packageSnapshot
+
+                const now = new Date()
+
                 visitsUsed =
-                  activeSubscription.visitsUsed ?? 0
+                  activeSubscription.visitsUsed || 0
 
                 visitsTotal =
-                  activeSubscription.visitsTotal ?? 0
+                  activeSubscription.visitsTotal || 0
 
-                visitsLeft =
-                  visitsTotal - visitsUsed
+                const startDate = new Date(
+                  activeSubscription.startedAt
+                )
 
-                isExpired =
-                  activeSubscription.status === "expired"
+                const expireDate = new Date(
+                  activeSubscription.expiresAt
+                )
 
-                visitPercent =
-                  visitsTotal > 0
+                const totalDays =
+                  (expireDate - startDate) /
+                  (1000 * 60 * 60 * 24)
+
+                const usedDays =
+                  (now - startDate) /
+                  (1000 * 60 * 60 * 24)
+
+                daysPercent =
+                  totalDays > 0
                     ? Math.min(
-                        (visitsUsed /
-                          visitsTotal) *
-                          100,
+                        (usedDays / totalDays) * 100,
                         100
                       )
                     : 0
-              }
 
-              const sessionTotal =
-                activeSession?.totalAmount || 0
+                daysLeft = Math.max(
+                  Math.ceil(
+                    (expireDate - now) /
+                      (1000 * 60 * 60 * 24)
+                  ),
+                  0
+                )
+
+                isExpired = now > expireDate
+
+                if (snapshot.isUnlimited) {
+                  visitPercent = daysPercent
+                } else {
+                  visitPercent =
+                    visitsTotal > 0
+                      ? Math.min(
+                          (visitsUsed /
+                            visitsTotal) *
+                            100,
+                          100
+                        )
+                      : 0
+
+                  visitsLeft =
+                    visitsTotal - visitsUsed
+
+                  visitPercent = Math.max(
+                    visitPercent,
+                    daysPercent
+                  )
+                }
+              }
 
               const canCheckIn =
                 hasPackage &&
                 !isExpired &&
-                visitsLeft > 0
+                (activeSubscription.packageSnapshot
+                  .isUnlimited ||
+                  visitsLeft > 0)
 
               return (
                 <tr
                   key={client.id}
                   className="hover:bg-gray-800/40 transition"
                 >
-                  {/* NUMBER */}
                   <td className="px-6 py-6 text-gray-400">
                     {index + 1}
                   </td>
@@ -124,8 +161,9 @@ export default function ClientsTable({ clients }) {
                         <div className="text-xs text-gray-500">
                           ID: {client.id}
                         </div>
-                        <div className="text-white font-semibold text-base hover:text-indigo-400 transition">
-                          {client.firstName} {client.lastName}
+                        <div className="text-white font-semibold text-base">
+                          {client.firstName}{" "}
+                          {client.lastName}
                         </div>
                         <div className="text-gray-400 text-sm">
                           {client.phone}
@@ -139,16 +177,27 @@ export default function ClientsTable({ clients }) {
                     {hasPackage ? (
                       <>
                         <div className="text-white">
-                          {activeSubscription.packageName}
+                          {
+                            activeSubscription
+                              .packageSnapshot.name
+                          }
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 text-xs">
-                          <span className="text-gray-400">
-                            {visitsUsed} / {visitsTotal}
-                          </span>
+                          {!activeSubscription
+                            .packageSnapshot
+                            .isUnlimited && (
+                            <span className="text-gray-400">
+                              {visitsUsed} /{" "}
+                              {visitsTotal}
+                            </span>
+                          )}
 
                           <span className="text-indigo-400 ml-2">
-                            {Math.round(visitPercent)}%
+                            {Math.round(
+                              visitPercent
+                            )}
+                            %
                           </span>
                         </div>
 
@@ -162,7 +211,7 @@ export default function ClientsTable({ clients }) {
                         </div>
 
                         {isExpired && (
-                          <div className="text-red-400 text-xs mt-2">
+                          <div className="text-red-400 text-xs mt-1">
                             Package expired
                           </div>
                         )}
@@ -210,21 +259,8 @@ export default function ClientsTable({ clients }) {
                   </td>
 
                   {/* ACTIVITY */}
-                  <td className="px-6 py-6">
-                    <div
-                      onClick={() =>
-                        navigate(`/app/sessions?clientId=${client.id}`)
-                      }
-                      className="font-semibold text-sm text-indigo-400 cursor-pointer hover:underline"
-                    >
-                      {sessionTotal.toLocaleString("ru-RU")} сум
-                    </div>
-
-                    <div className="text-gray-400 text-xs mt-1">
-                      {activeSession
-                        ? "View session"
-                        : "No activity"}
-                    </div>
+                  <td className="px-6 py-6 text-gray-400 text-sm">
+                    —
                   </td>
                 </tr>
               )
@@ -239,29 +275,6 @@ export default function ClientsTable({ clients }) {
           onClose={() =>
             setActivateClient(null)
           }
-        />
-      )}
-
-      {paymentClient && (
-        <PaymentModal
-          total={getUnpaidTotalByClient(
-            paymentClient.id
-          )}
-          onClose={() =>
-            setPaymentClient(null)
-          }
-          onConfirm={() => {
-            const unpaid =
-              getUnpaidSessionsByClient(
-                paymentClient.id
-              )
-
-            markSessionsPaid(
-              unpaid.map((s) => s.id)
-            )
-
-            setPaymentClient(null)
-          }}
         />
       )}
 
@@ -289,7 +302,12 @@ export default function ClientsTable({ clients }) {
               lockerCode,
             })
 
-            incrementVisit(activeSub.id)
+            if (
+              !activeSub.packageSnapshot
+                .isUnlimited
+            ) {
+              incrementVisit(activeSub.id)
+            }
 
             setKeyClient(null)
           }}
@@ -304,18 +322,9 @@ export default function ClientsTable({ clients }) {
             </div>
 
             <div className="text-sm text-gray-400">
-              Client: {closeData.client.firstName}{" "}
+              Client:{" "}
+              {closeData.client.firstName}{" "}
               {closeData.client.lastName}
-            </div>
-
-            <div className="text-sm">
-              Total:
-              <span className="font-semibold ml-2">
-                {closeData.session.totalAmount.toLocaleString(
-                  "ru-RU"
-                )}{" "}
-                сум
-              </span>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
