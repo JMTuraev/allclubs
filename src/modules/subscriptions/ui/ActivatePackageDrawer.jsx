@@ -19,24 +19,18 @@ export default function ActivatePackageDrawer({
   const [showPayment, setShowPayment] = useState(false)
   const [processing, setProcessing] = useState(false)
 
-  const checkId = useMemo(
-    () => `SUB-${Date.now()}`,
-    []
-  )
+  const checkId = useMemo(() => `SUB-${Date.now()}`, [])
 
   return (
     <>
       <div className="fixed inset-0 z-50 flex">
         <div
           className="flex-1 bg-black/40 backdrop-blur-sm"
-          onClick={() => {
-            if (!processing) onClose()
-          }}
+          onClick={() => !processing && onClose()}
         />
 
-        <div className="w-[440px] bg-[#0F172A] border-l border-white/10 p-6 flex flex-col">
-
-          <div className="flex justify-between items-center mb-6">
+        <div className="w-[440px] bg-[#0F172A] border-l border-white/10 flex flex-col h-full">
+          <div className="p-6 border-b border-white/10 flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-white">
                 Activate Package
@@ -46,30 +40,24 @@ export default function ActivatePackageDrawer({
               </p>
             </div>
 
-            <button
-              disabled={processing}
-              onClick={onClose}
-            >
+            <button disabled={processing} onClick={onClose}>
               <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-white" />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3">
+          <div className="flex-1 overflow-y-auto p-6 space-y-3">
             {packages.map((pkg) => (
               <div
                 key={pkg.id}
-                onClick={() =>
-                  !processing && setSelected(pkg)
-                }
-                className={`p-4 rounded-xl border cursor-pointer transition ${
-                  selected?.id === pkg.id
-                    ? "border-indigo-500 bg-indigo-600/10"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                } ${
-                  processing
-                    ? "opacity-50 pointer-events-none"
-                    : ""
-                }`}
+                onClick={() => !processing && setSelected(pkg)}
+                className={`p-4 rounded-xl border cursor-pointer transition
+                  ${
+                    selected?.id === pkg.id
+                      ? "border-indigo-500 bg-indigo-600/10"
+                      : "border-white/10 bg-white/5 hover:bg-white/10"
+                  }
+                  ${processing ? "opacity-50 pointer-events-none" : ""}
+                `}
               >
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-white">
@@ -85,8 +73,8 @@ export default function ActivatePackageDrawer({
           </div>
 
           {selected && (
-            <div className="mt-6 border-t border-white/10 pt-4 space-y-3 text-sm">
-              <div className="flex justify-between text-gray-400">
+            <div className="border-t border-white/10 p-6 mt-auto">
+              <div className="flex justify-between text-gray-400 text-sm mb-4">
                 <span>Total</span>
                 <span>
                   {selected.price.toLocaleString("ru-RU")} сум
@@ -96,7 +84,7 @@ export default function ActivatePackageDrawer({
               <button
                 disabled={processing}
                 onClick={() => setShowPayment(true)}
-                className="w-full mt-2 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition disabled:opacity-50"
+                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition disabled:opacity-50"
               >
                 Continue to Payment
               </button>
@@ -105,7 +93,6 @@ export default function ActivatePackageDrawer({
         </div>
       </div>
 
-      {/* PAYMENT */}
       {showPayment && selected && (
         <PaymentModal
           total={selected.price}
@@ -113,9 +100,7 @@ export default function ActivatePackageDrawer({
             name: `${client?.firstName} ${client?.lastName}`,
           }}
           checkNumber={checkId}
-          onClose={() => {
-            if (!processing) setShowPayment(false)
-          }}
+          onClose={() => !processing && setShowPayment(false)}
           onConfirm={async (paymentData) => {
             if (processing) return
             setProcessing(true)
@@ -123,7 +108,7 @@ export default function ActivatePackageDrawer({
             try {
               const { amounts, comment } = paymentData
 
-              /* 1️⃣ FINANCE SERVICE */
+              /* SERVICE TX */
               addFinanceTx({
                 type: "service",
                 category: "package",
@@ -135,35 +120,26 @@ export default function ActivatePackageDrawer({
                 },
               })
 
-              /* 2️⃣ FINANCE PAYMENTS */
-              Object.entries(amounts).forEach(
-                ([method, amount]) => {
-                  if (Number(amount) > 0) {
-                    addFinanceTx({
-                      type: "payment",
-                      category: "package",
-                      clientId: client.id,
-                      amount: Number(amount),
-                      paymentMethod: method,
-                      comment,
-                    })
-                  }
+              /* PAYMENT TX */
+              Object.entries(amounts).forEach(([method, amount]) => {
+                if (Number(amount) > 0) {
+                  addFinanceTx({
+                    type: "payment",
+                    category: "package",
+                    clientId: client.id,
+                    amount: Number(amount),
+                    paymentMethod: method,
+                    comment,
+                  })
                 }
-              )
-
-              /* 3️⃣ ACTIVATE SUBSCRIPTION
-                 🔥 TO‘LIQ PACKAGE SNAPSHOT YUBORILADI
-              */
-              activateSubscription({
-                clientId: client.id,
-                packageData: selected, // 💎 MUHIM: qisqartirmaymiz
-                paymentId: Date.now(),
               })
+
+              /* 🔥 TO‘G‘RI ACTIVATE */
+              activateSubscription(client, selected)
 
               setShowPayment(false)
               setSelected(null)
               onClose()
-
             } finally {
               setProcessing(false)
             }

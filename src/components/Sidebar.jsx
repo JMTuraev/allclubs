@@ -17,6 +17,7 @@ const navigation = [
   { name: "Finance", to: "/app/finance", icon: ChartPieIcon },
   { name: "Packages", to: "/app/packages", icon: CubeIcon },
   { name: "Staffs", to: "/app/staffs", icon: UsersIcon },
+  { name: "Audit", to: "/app/audit", icon: UsersIcon },
 ]
 
 function classNames(...classes) {

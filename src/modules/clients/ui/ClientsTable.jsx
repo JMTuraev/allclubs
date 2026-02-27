@@ -3,10 +3,8 @@ import { useNavigate } from "react-router-dom"
 
 import { useSessionsContext } from "../../sessions/domain/SessionsContext"
 import { useSessionSelectors } from "../../sessions/domain/useSessionSelectors"
-
 import { useSubscriptionsContext } from "../../subscriptions/domain/SubscriptionsContext"
 
-import PaymentModal from "../../../components/modals/PaymentModal"
 import KeypadModal from "../../../components/modals/KeypadModal"
 import ActivatePackageDrawer from "../../subscriptions/ui/ActivatePackageDrawer"
 
@@ -44,40 +42,27 @@ export default function ClientsTable({ clients }) {
               const activeSession =
                 getActiveSessionByClient(client.id)
 
-              const activeSubscription =
+              const subscription =
                 getActiveSubscriptionByClient(client.id)
 
-              const hasPackage = !!activeSubscription
+              const hasActivePackage =
+                subscription && !subscription.isExpired
 
-              /* ================= SNAPSHOT LOGIC ================= */
+              /* ================= PROGRESS ================= */
 
               let visitPercent = 0
               let visitsUsed = 0
               let visitsTotal = 0
               let visitsLeft = 0
-              let daysPercent = 0
-              let daysLeft = 0
-              let isExpired = false
 
-              if (activeSubscription) {
-                const snapshot =
-                  activeSubscription.packageSnapshot
-
+              if (hasActivePackage) {
                 const now = new Date()
 
-                visitsUsed =
-                  activeSubscription.visitsUsed || 0
+                visitsUsed = subscription.visitsUsed || 0
+                visitsTotal = subscription.visitsTotal || 0
 
-                visitsTotal =
-                  activeSubscription.visitsTotal || 0
-
-                const startDate = new Date(
-                  activeSubscription.startedAt
-                )
-
-                const expireDate = new Date(
-                  activeSubscription.expiresAt
-                )
+                const startDate = new Date(subscription.startedAt)
+                const expireDate = new Date(subscription.expiresAt)
 
                 const totalDays =
                   (expireDate - startDate) /
@@ -87,40 +72,23 @@ export default function ClientsTable({ clients }) {
                   (now - startDate) /
                   (1000 * 60 * 60 * 24)
 
-                daysPercent =
+                const daysPercent =
                   totalDays > 0
-                    ? Math.min(
-                        (usedDays / totalDays) * 100,
-                        100
-                      )
+                    ? Math.min((usedDays / totalDays) * 100, 100)
                     : 0
 
-                daysLeft = Math.max(
-                  Math.ceil(
-                    (expireDate - now) /
-                      (1000 * 60 * 60 * 24)
-                  ),
-                  0
-                )
-
-                isExpired = now > expireDate
-
-                if (snapshot.isUnlimited) {
+                if (subscription.packageSnapshot.isUnlimited) {
                   visitPercent = daysPercent
                 } else {
                   visitPercent =
                     visitsTotal > 0
                       ? Math.min(
-                          (visitsUsed /
-                            visitsTotal) *
-                            100,
+                          (visitsUsed / visitsTotal) * 100,
                           100
                         )
                       : 0
 
-                  visitsLeft =
-                    visitsTotal - visitsUsed
-
+                  visitsLeft = visitsTotal - visitsUsed
                   visitPercent = Math.max(
                     visitPercent,
                     daysPercent
@@ -129,10 +97,8 @@ export default function ClientsTable({ clients }) {
               }
 
               const canCheckIn =
-                hasPackage &&
-                !isExpired &&
-                (activeSubscription.packageSnapshot
-                  .isUnlimited ||
+                hasActivePackage &&
+                (subscription.packageSnapshot.isUnlimited ||
                   visitsLeft > 0)
 
               return (
@@ -140,6 +106,7 @@ export default function ClientsTable({ clients }) {
                   key={client.id}
                   className="hover:bg-gray-800/40 transition"
                 >
+                  {/* № */}
                   <td className="px-6 py-6 text-gray-400">
                     {index + 1}
                   </td>
@@ -162,8 +129,7 @@ export default function ClientsTable({ clients }) {
                           ID: {client.id}
                         </div>
                         <div className="text-white font-semibold text-base">
-                          {client.firstName}{" "}
-                          {client.lastName}
+                          {client.firstName} {client.lastName}
                         </div>
                         <div className="text-gray-400 text-sm">
                           {client.phone}
@@ -174,30 +140,20 @@ export default function ClientsTable({ clients }) {
 
                   {/* PACKAGE */}
                   <td className="px-6 py-6">
-                    {hasPackage ? (
+                    {hasActivePackage ? (
                       <>
                         <div className="text-white">
-                          {
-                            activeSubscription
-                              .packageSnapshot.name
-                          }
+                          {subscription.packageSnapshot.name}
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 text-xs">
-                          {!activeSubscription
-                            .packageSnapshot
-                            .isUnlimited && (
+                          {!subscription.packageSnapshot.isUnlimited && (
                             <span className="text-gray-400">
-                              {visitsUsed} /{" "}
-                              {visitsTotal}
+                              {visitsUsed} / {visitsTotal}
                             </span>
                           )}
-
                           <span className="text-indigo-400 ml-2">
-                            {Math.round(
-                              visitPercent
-                            )}
-                            %
+                            {Math.round(visitPercent)}%
                           </span>
                         </div>
 
@@ -209,12 +165,6 @@ export default function ClientsTable({ clients }) {
                             }}
                           />
                         </div>
-
-                        {isExpired && (
-                          <div className="text-red-400 text-xs mt-1">
-                            Package expired
-                          </div>
-                        )}
                       </>
                     ) : (
                       <button
@@ -231,17 +181,23 @@ export default function ClientsTable({ clients }) {
                   {/* LOCKER */}
                   <td className="px-6 py-6">
                     {activeSession ? (
-                      <button
-                        onClick={() =>
-                          setCloseData({
-                            session: activeSession,
-                            client,
-                          })
-                        }
-                        className="px-4 py-2 text-xs bg-red-600 hover:bg-red-500 rounded-lg transition"
-                      >
-                        Close Session
-                      </button>
+                      <div className="space-y-2">
+                        <div className="text-emerald-400 text-sm">
+                          Locker: {activeSession.lockerCode}
+                        </div>
+
+                        <button
+                          onClick={() =>
+                            setCloseData({
+                              session: activeSession,
+                              client,
+                            })
+                          }
+                          className="px-4 py-2 text-xs bg-red-600 hover:bg-red-500 rounded-lg transition"
+                        >
+                          Close Session
+                        </button>
+                      </div>
                     ) : canCheckIn ? (
                       <button
                         onClick={() =>
@@ -259,8 +215,21 @@ export default function ClientsTable({ clients }) {
                   </td>
 
                   {/* ACTIVITY */}
-                  <td className="px-6 py-6 text-gray-400 text-sm">
-                    —
+                  <td className="px-6 py-6 text-sm">
+                    {activeSession ? (
+                      <button
+                        onClick={() =>
+                          navigate(
+                            `/app/sessions?client=${client.id}`
+                          )
+                        }
+                        className="text-emerald-400 hover:underline"
+                      >
+                        View session
+                      </button>
+                    ) : (
+                      <span className="text-gray-500">—</span>
+                    )}
                   </td>
                 </tr>
               )
@@ -269,28 +238,26 @@ export default function ClientsTable({ clients }) {
         </table>
       </div>
 
+      {/* ACTIVATE DRAWER */}
       {activateClient && (
         <ActivatePackageDrawer
           client={activateClient}
-          onClose={() =>
-            setActivateClient(null)
-          }
+          onClose={() => setActivateClient(null)}
         />
       )}
 
+      {/* CHECK-IN MODAL */}
       {keyClient && (
         <KeypadModal
           mode="checkin"
-          onClose={() =>
-            setKeyClient(null)
-          }
+          onClose={() => setKeyClient(null)}
           onConfirm={(lockerCode) => {
-            const activeSub =
+            const sub =
               getActiveSubscriptionByClient(
                 keyClient.id
               )
 
-            if (!activeSub) return
+            if (!sub || sub.isExpired) return
 
             startSession({
               clientId: keyClient.id,
@@ -302,11 +269,8 @@ export default function ClientsTable({ clients }) {
               lockerCode,
             })
 
-            if (
-              !activeSub.packageSnapshot
-                .isUnlimited
-            ) {
-              incrementVisit(activeSub.id)
+            if (!sub.packageSnapshot.isUnlimited) {
+              incrementVisit(sub.id)
             }
 
             setKeyClient(null)
@@ -314,6 +278,7 @@ export default function ClientsTable({ clients }) {
         />
       )}
 
+      {/* CLOSE SESSION MODAL */}
       {closeData && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-[#111827] w-[400px] rounded-2xl p-6 space-y-5 border border-white/10">
@@ -322,16 +287,13 @@ export default function ClientsTable({ clients }) {
             </div>
 
             <div className="text-sm text-gray-400">
-              Client:{" "}
-              {closeData.client.firstName}{" "}
+              Client: {closeData.client.firstName}{" "}
               {closeData.client.lastName}
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <button
-                onClick={() =>
-                  setCloseData(null)
-                }
+                onClick={() => setCloseData(null)}
                 className="px-4 py-2 bg-gray-700 rounded-lg"
               >
                 Cancel
@@ -339,9 +301,7 @@ export default function ClientsTable({ clients }) {
 
               <button
                 onClick={() => {
-                  endSession(
-                    closeData.session.id
-                  )
+                  endSession(closeData.session.id)
                   setCloseData(null)
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"

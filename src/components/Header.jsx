@@ -2,12 +2,11 @@ import {
   Bars3Icon,
   BellIcon,
   CubeIcon,
+  UserPlusIcon,
+  IdentificationIcon,
 } from "@heroicons/react/24/outline"
 
-import {
-  PlusIcon,
-  ArrowLeftIcon,
-} from "@heroicons/react/20/solid"
+import { ArrowLeftIcon } from "@heroicons/react/20/solid"
 
 import {
   useLocation,
@@ -20,14 +19,15 @@ import Filter from "./Filter"
 export default function Header({ setSidebarOpen }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const path = location.pathname
   const urlDate = searchParams.get("date")
 
   const isSessionsPage = path === "/app/sessions"
   const isFinancePage = path === "/app/finance"
-  const isPackagesPage = path === "/app/packages"
+
+  const isPackagesPage = path.startsWith("/app/packages")
   const isCreatePackagePage = path === "/app/packages/create"
 
   const isStaffPage = path === "/app/staffs"
@@ -36,20 +36,20 @@ export default function Header({ setSidebarOpen }) {
   const isClientsPage = path === "/app/clients"
   const isCreateClientPage = path === "/app/clients/create"
 
-  /* ================= OPEN BAR NEW TAB ================= */
+  const activeTab = searchParams.get("tab") || "templates"
+
+  const changeTab = (tab) => {
+    setSearchParams({ tab })
+  }
 
   const openBar = () => {
     const url = window.location.origin + "/bar"
     window.open(url, "_blank", "noopener,noreferrer")
   }
 
-  /* ================= FORMAT DATE ================= */
-
   const formattedDate = (() => {
     if (!urlDate) return null
-
     const d = new Date(urlDate)
-
     return d.toLocaleDateString("ru-RU", {
       day: "2-digit",
       month: "2-digit",
@@ -59,9 +59,9 @@ export default function Header({ setSidebarOpen }) {
 
   return (
     <div className="sticky top-0 z-40 flex h-16 items-center border-b border-white/10 bg-gray-900 px-6">
-
-      {/* ================= LEFT ================= */}
-      <div className="flex items-center gap-4">
+      
+      {/* LEFT */}
+      <div className="flex items-center gap-6">
 
         <button
           onClick={() => setSidebarOpen(true)}
@@ -87,28 +87,60 @@ export default function Header({ setSidebarOpen }) {
         {isCreateClientPage && (
           <HeaderBack title="Новый клиент" navigate={navigate} />
         )}
+
+        {/* PACKAGES TABS */}
+        {isPackagesPage && !isCreatePackagePage && (
+          <div className="flex gap-3 ml-4">
+
+            <button
+              onClick={() => changeTab("templates")}
+              className={`
+                px-4 py-2 rounded-xl text-sm font-medium transition-all
+                ${
+                  activeTab === "templates"
+                    ? "bg-indigo-600/20 text-indigo-400"
+                    : "text-gray-400 hover:text-white"
+                }
+              `}
+            >
+              Package Templates
+            </button>
+
+            <button
+              onClick={() => changeTab("sold")}
+              className={`
+                px-4 py-2 rounded-xl text-sm font-medium transition-all
+                ${
+                  activeTab === "sold"
+                    ? "bg-indigo-600/20 text-indigo-400"
+                    : "text-gray-400 hover:text-white"
+                }
+              `}
+            >
+              Sold Packages
+            </button>
+
+          </div>
+        )}
       </div>
 
-      {/* ================= RIGHT ================= */}
+      {/* RIGHT */}
       <div className="ml-auto flex items-center gap-6">
 
-        {/* FILTER ZONE */}
         {(isSessionsPage || isFinancePage) && (
-          <>
-            {formattedDate ? (
-              <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm">
-                {formattedDate}
-              </div>
-            ) : (
-              <Filter onChange={() => {}} />
-            )}
-          </>
+          formattedDate ? (
+            <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm">
+              {formattedDate}
+            </div>
+          ) : (
+            <Filter onChange={() => {}} />
+          )
         )}
 
-        {isPackagesPage && (
+        {isPackagesPage && !isCreatePackagePage && (
           <CreateButton
             text="Создать тариф"
-            color="indigo"
+            icon={CubeIcon}
             onClick={() => navigate("/app/packages/create")}
           />
         )}
@@ -116,7 +148,7 @@ export default function Header({ setSidebarOpen }) {
         {isStaffPage && (
           <CreateButton
             text="Новый сотрудник"
-            color="emerald"
+            icon={IdentificationIcon}
             onClick={() => navigate("/app/staffs/create")}
           />
         )}
@@ -124,32 +156,28 @@ export default function Header({ setSidebarOpen }) {
         {isClientsPage && (
           <CreateButton
             text="Новый клиент"
-            color="violet"
+            icon={UserPlusIcon}
             onClick={() => navigate("/app/clients/create")}
           />
         )}
 
-        {/* BAR NEW TAB */}
         <button
           onClick={openBar}
           className="flex items-center justify-center h-9 w-9 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition"
-          title="Open Bar"
         >
           <CubeIcon className="h-5 w-5" />
         </button>
 
-        {/* Notifications */}
         <BellIcon className="h-6 w-6 text-gray-400 hover:text-white cursor-pointer transition" />
 
-        {/* Profile */}
         <div className="flex items-center gap-3 cursor-pointer group">
-          <span className="text-sm font-semibold text-white group-hover:text-indigo-400 transition">
+          <span className="text-sm font-semibold text-white group-hover:text-emerald-400 transition">
             Owner
           </span>
           <img
             src="https://i.pravatar.cc/100"
             alt="profile"
-            className="h-9 w-9 rounded-full border border-white/10 group-hover:border-indigo-500 transition"
+            className="h-9 w-9 rounded-full border border-white/10 group-hover:border-emerald-500 transition"
           />
         </div>
 
@@ -158,8 +186,7 @@ export default function Header({ setSidebarOpen }) {
   )
 }
 
-/* ================= BACK HEADER ================= */
-
+/* BACK HEADER */
 function HeaderBack({ title, navigate }) {
   return (
     <div className="flex items-center gap-3">
@@ -177,34 +204,25 @@ function HeaderBack({ title, navigate }) {
   )
 }
 
-/* ================= CREATE BUTTON ================= */
-
-function CreateButton({ text, color, onClick }) {
-  const colors = {
-    indigo:
-      "from-indigo-600 to-indigo-500 shadow-indigo-600/20 hover:shadow-indigo-500/40",
-    emerald:
-      "from-emerald-600 to-emerald-500 shadow-emerald-600/20 hover:shadow-emerald-500/40",
-    violet:
-      "from-violet-600 to-violet-500 shadow-violet-600/20 hover:shadow-violet-500/40",
-  }
-
+/* CREATE BUTTON */
+function CreateButton({ text, icon: Icon, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`
+      className="
         hidden sm:flex items-center gap-2
-        rounded-lg
-        bg-gradient-to-r ${colors[color]}
-        px-4 py-2
+        rounded-xl
+        bg-gradient-to-r from-emerald-600 to-emerald-500
+        px-5 py-2.5
         text-sm font-semibold text-white
-        shadow-lg
+        shadow-lg shadow-emerald-600/20
         hover:scale-105
+        hover:shadow-emerald-500/40
         active:scale-95
         transition-all duration-300
-      `}
+      "
     >
-      <PlusIcon className="h-5 w-5" />
+      <Icon className="h-5 w-5" />
       {text}
     </button>
   )

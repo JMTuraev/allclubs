@@ -23,10 +23,12 @@ import CreateClub from "./pages/CreateClub"
 
 /* ================= DASHBOARD ================= */
 import Dashboard from "./pages/dashboard/Dashboard"
-import PackageList from "./pages/packages/PackageList"
+import PackagesPage from "./pages/packages/PackagesPage"
 import CreatePackage from "./pages/packages/CreatePackage"
 import StaffList from "./pages/StaffList"
 import CreateStaff from "./pages/CreateStaff"
+import AuditPage from "./pages/audit/AuditPage"
+import { AuditProvider } from "./modules/audit/AuditContext"
 
 /* ================= CLIENTS ================= */
 import ClientsPage from "./pages/clients/ClientsPage"
@@ -62,6 +64,7 @@ export default function App() {
   }, [])
 
   return (
+    <AuditProvider>
     <ProductProvider>
       <ClientsProvider>
         <PackagesProvider>
@@ -96,7 +99,7 @@ export default function App() {
                       <Route path="dashboard" element={<Dashboard />} />
 
                       {/* PACKAGES */}
-                      <Route path="packages" element={<PackageList />} />
+                      <Route path="packages" element={<PackagesPage />} />
                       <Route
                         path="packages/create"
                         element={<CreatePackage />}
@@ -121,7 +124,13 @@ export default function App() {
 
                       {/* SESSIONS */}
                       <Route path="sessions" element={<SessionsPage />} />
+                    
+                      {/* Audit */}
+                      <Route path="audit" element={<AuditPage />} />
+                    
                     </Route>
+                    
+                    
 
                     {/* ================= BAR MODULE ================= */}
                     <Route path="/bar/*" element={<BarLayout />}>
@@ -155,5 +164,6 @@ export default function App() {
         </PackagesProvider>
       </ClientsProvider>
     </ProductProvider>
+    </AuditProvider>
   )
 }

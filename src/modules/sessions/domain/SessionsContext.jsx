@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useMemo } from "react"
 import { v4 as uuid } from "uuid"
+import { useAudit } from "../../audit/AuditContext"
 
 const SessionsContext = createContext()
 
@@ -54,6 +55,7 @@ function reducer(state, action) {
 
 export function SessionsProvider({ children }) {
   const [sessions, dispatch] = useReducer(reducer, [])
+  const { addEvent } = useAudit() // 🔥 audit ulash
 
   const startSession = ({
     clientId,
@@ -80,11 +82,25 @@ export function SessionsProvider({ children }) {
     }
 
     dispatch({ type: "START_SESSION", payload: newSession })
+
+    // 🔥 AUDIT YOZISH
+    addEvent({
+      type: "SESSION_OPENED",
+      sessionId: newSession.id,
+      clientName
+    })
+
     return newSession
   }
 
   const endSession = (id) => {
     dispatch({ type: "END_SESSION", payload: id })
+
+    // 🔥 AUDIT YOZISH
+    addEvent({
+      type: "SESSION_CLOSED",
+      sessionId: id
+    })
   }
 
   const markSessionsPaid = (ids) => {
@@ -101,6 +117,13 @@ export function SessionsProvider({ children }) {
     dispatch({
       type: "ADD_TRANSACTION",
       payload: { sessionId, tx: newTx }
+    })
+
+    // 🔥 optional audit
+    addEvent({
+      type: "TRANSACTION_ADDED",
+      sessionId,
+      amount: tx.amount
     })
   }
 
@@ -120,5 +143,9 @@ export function SessionsProvider({ children }) {
 }
 
 export function useSessionsContext() {
-  return useContext(SessionsContext)
+  const ctx = useContext(SessionsContext)
+  if (!ctx) {
+    throw new Error("useSessionsContext must be used inside SessionsProvider")
+  }
+  return ctx
 }

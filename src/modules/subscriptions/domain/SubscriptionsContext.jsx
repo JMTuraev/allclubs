@@ -1,168 +1,110 @@
-import { createContext, useContext, useReducer } from "react"
-import { v4 as uuid } from "uuid"
+import { createContext, useContext, useState, useMemo } from "react"
 
 const SubscriptionsContext = createContext(null)
 
-/* ================= REDUCER ================= */
+export function SubscriptionsProvider({ children }) {
+  const [subscriptions, setSubscriptions] = useState([])
 
-function reducer(state, action) {
-  switch (action.type) {
+  const activateSubscription = (client, template) => {
+    if (!client || !template) return
 
-    case "ACTIVATE_SUBSCRIPTION":
-      return [action.payload, ...state]
+    const startedAt = new Date()
 
-    case "EXPIRE_CLIENT_ACTIVE":
-      return state.map(sub =>
-        String(sub.clientId) === String(action.payload) &&
-        sub.status === "active"
-          ? { ...sub, status: "expired" }
-          : sub
-      )
+    const duration =
+      Number(template.duration) || 30
 
-    case "INCREMENT_VISIT":
-      return state.map(sub => {
-        if (sub.id !== action.payload) return sub
+    const expiresAt = new Date(startedAt)
+    expiresAt.setDate(startedAt.getDate() + duration)
 
-        const updatedVisits = (sub.visitsUsed || 0) + 1
+    const isUnlimited = Boolean(template.isUnlimited)
 
-        const shouldExpire =
-          sub.visitsTotal > 0 &&
-          updatedVisits >= sub.visitsTotal
+    const visits =
+      isUnlimited
+        ? null
+        : Number(template.visitLimit) > 0
+        ? Number(template.visitLimit)
+        : 1
+
+    const newSubscription = {
+      id: crypto.randomUUID(),
+
+      clientId: client.id,
+      clientName: `${client.firstName} ${client.lastName}`,
+      clientPhone: client.phone ?? "",
+
+      packageSnapshot: {
+        id: template.id,
+        name: template.name,
+        duration,
+        isUnlimited,
+        visitsTotal: visits,
+        price: template.price ?? 0,
+      },
+
+      visitsUsed: 0,
+      visitsTotal: visits,
+
+      startedAt: startedAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      createdAt: new Date().toISOString(),
+    }
+
+    setSubscriptions((prev) => [...prev, newSubscription])
+  }
+
+  const incrementVisit = (subscriptionId) => {
+    setSubscriptions((prev) =>
+      prev.map((sub) => {
+        if (sub.id !== subscriptionId) return sub
+        if (sub.packageSnapshot?.isUnlimited) return sub
 
         return {
           ...sub,
-          visitsUsed: updatedVisits,
-          status: shouldExpire ? "expired" : sub.status,
+          visitsUsed: sub.visitsUsed + 1,
         }
       })
-
-    case "FORCE_EXPIRE":
-      return state.map(sub =>
-        sub.id === action.payload
-          ? { ...sub, status: "expired" }
-          : sub
-      )
-
-    default:
-      return state
-  }
-}
-
-/* ================= PROVIDER ================= */
-
-export function SubscriptionsProvider({ children }) {
-  const [subscriptions, dispatch] = useReducer(reducer, [])
-
-  /* ================= ACTIVATE ================= */
-
-  const activateSubscription = ({
-    clientId,
-    packageData,
-    paymentId,
-  }) => {
-
-    const normalizedClientId = String(clientId)
-
-    // 1️⃣ Eski active subscriptionni expire qilamiz
-    dispatch({
-      type: "EXPIRE_CLIENT_ACTIVE",
-      payload: normalizedClientId,
-    })
-
-    const startDate = new Date()
-
-    const expireDate = new Date()
-    expireDate.setDate(
-      expireDate.getDate() +
-      Number(packageData?.duration || 0) +
-      Number(packageData?.bonusDays || 0)
     )
-
-    // 2️⃣ Snapshot yaratamiz (ENG MUHIM JOY)
-    const newSubscription = {
-      id: uuid(),
-
-      clientId: normalizedClientId,
-
-      // 🔥 PACKAGE SNAPSHOT (IMMUTABLE HISTORY)
-      packageSnapshot: {
-        id: packageData?.id ?? null,
-        name: packageData?.name ?? "Unknown",
-        price: Number(packageData?.price) || 0,
-        duration: Number(packageData?.duration) || 0,
-        bonusDays: Number(packageData?.bonusDays) || 0,
-        isUnlimited: Boolean(packageData?.isUnlimited),
-        visitLimit:
-          packageData?.isUnlimited
-            ? null
-            : Number(packageData?.visitLimit) || 0,
-        startTime: packageData?.startTime ?? null,
-        endTime: packageData?.endTime ?? null,
-        freezeEnabled: Boolean(packageData?.freezeEnabled),
-        maxFreezeDays:
-          Number(packageData?.maxFreezeDays) || 0,
-        gender: packageData?.gender ?? "all",
-      },
-
-      // 🔥 VISIT LOGIC
-      visitsTotal: packageData?.isUnlimited
-        ? 999999
-        : Number(packageData?.visitLimit) || 0,
-
-      visitsUsed: 0,
-
-      // 🔥 DATE LOGIC
-      startedAt: startDate.toISOString(),
-      expiresAt: expireDate.toISOString(),
-
-      status: "active",
-
-      paymentId: paymentId ?? null,
-    }
-
-    dispatch({
-      type: "ACTIVATE_SUBSCRIPTION",
-      payload: newSubscription,
-    })
-
-    return newSubscription
   }
 
-  /* ================= VISIT ================= */
+  /* ================= DERIVED STATUS ================= */
 
-  const incrementVisit = (subscriptionId) => {
-    dispatch({
-      type: "INCREMENT_VISIT",
-      payload: subscriptionId,
+  const subscriptionsWithStatus = useMemo(() => {
+    const now = new Date()
+
+    return subscriptions.map((sub) => {
+      const expireDate = new Date(sub.expiresAt)
+
+      const isExpiredByDate =
+        expireDate.getTime() < now.getTime()
+
+      const isVisitsFinished =
+        !sub.packageSnapshot?.isUnlimited &&
+        sub.visitsTotal !== null &&
+        sub.visitsUsed >= sub.visitsTotal
+
+      return {
+        ...sub,
+        isExpired: isExpiredByDate || isVisitsFinished,
+      }
     })
-  }
+  }, [subscriptions])
 
-  /* ================= MANUAL EXPIRE ================= */
-
-  const expireSubscription = (subscriptionId) => {
-    dispatch({
-      type: "FORCE_EXPIRE",
-      payload: subscriptionId,
-    })
-  }
-
-  /* ================= GETTERS ================= */
+  /* 🔥 FIX: derived massivdan qidiramiz */
 
   const getActiveSubscriptionByClient = (clientId) => {
-    return subscriptions.find(
-      sub =>
-        String(sub.clientId) === String(clientId) &&
-        sub.status === "active"
-    )
+    return subscriptionsWithStatus.find((sub) => {
+      if (String(sub.clientId) !== String(clientId))
+        return false
+      return !sub.isExpired
+    })
   }
 
   return (
     <SubscriptionsContext.Provider
       value={{
-        subscriptions,
+        subscriptions: subscriptionsWithStatus,
         activateSubscription,
         incrementVisit,
-        expireSubscription,
         getActiveSubscriptionByClient,
       }}
     >
@@ -171,16 +113,11 @@ export function SubscriptionsProvider({ children }) {
   )
 }
 
-/* ================= HOOK ================= */
-
 export function useSubscriptionsContext() {
   const context = useContext(SubscriptionsContext)
-
-  if (!context) {
+  if (!context)
     throw new Error(
       "useSubscriptionsContext must be used inside SubscriptionsProvider"
     )
-  }
-
   return context
 }
