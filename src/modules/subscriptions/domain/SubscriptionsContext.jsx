@@ -5,13 +5,13 @@ const SubscriptionsContext = createContext(null)
 export function SubscriptionsProvider({ children }) {
   const [subscriptions, setSubscriptions] = useState([])
 
+  /* ================= ACTIVATE ================= */
+
   const activateSubscription = (client, template) => {
     if (!client || !template) return
 
     const startedAt = new Date()
-
-    const duration =
-      Number(template.duration) || 30
+    const duration = Number(template.duration) || 30
 
     const expiresAt = new Date(startedAt)
     expiresAt.setDate(startedAt.getDate() + duration)
@@ -47,10 +47,32 @@ export function SubscriptionsProvider({ children }) {
       startedAt: startedAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
       createdAt: new Date().toISOString(),
+
+      status: "active",
+      replaceComment: null,
     }
 
     setSubscriptions((prev) => [...prev, newSubscription])
   }
+
+  /* ================= REPLACE ================= */
+
+  const replaceSubscription = (oldId, comment) => {
+    setSubscriptions((prev) =>
+      prev.map((sub) => {
+        if (sub.id !== oldId) return sub
+
+        return {
+          ...sub,
+          status: "replaced",
+          expiresAt: new Date().toISOString(),
+          replaceComment: comment || null,
+        }
+      })
+    )
+  }
+
+  /* ================= VISIT ================= */
 
   const incrementVisit = (subscriptionId) => {
     setSubscriptions((prev) =>
@@ -66,37 +88,35 @@ export function SubscriptionsProvider({ children }) {
     )
   }
 
-  /* ================= DERIVED STATUS ================= */
+  /* ================= DERIVED ================= */
 
   const subscriptionsWithStatus = useMemo(() => {
     const now = new Date()
 
     return subscriptions.map((sub) => {
+      if (sub.status === "replaced") return sub
+
       const expireDate = new Date(sub.expiresAt)
 
-      const isExpiredByDate =
-        expireDate.getTime() < now.getTime()
-
-      const isVisitsFinished =
-        !sub.packageSnapshot?.isUnlimited &&
-        sub.visitsTotal !== null &&
-        sub.visitsUsed >= sub.visitsTotal
+      const isExpired =
+        expireDate.getTime() < now.getTime() ||
+        (!sub.packageSnapshot?.isUnlimited &&
+          sub.visitsTotal !== null &&
+          sub.visitsUsed >= sub.visitsTotal)
 
       return {
         ...sub,
-        isExpired: isExpiredByDate || isVisitsFinished,
+        status: isExpired ? "expired" : "active",
       }
     })
   }, [subscriptions])
 
-  /* 🔥 FIX: derived massivdan qidiramiz */
-
   const getActiveSubscriptionByClient = (clientId) => {
-    return subscriptionsWithStatus.find((sub) => {
-      if (String(sub.clientId) !== String(clientId))
-        return false
-      return !sub.isExpired
-    })
+    return subscriptionsWithStatus.find(
+      (sub) =>
+        String(sub.clientId) === String(clientId) &&
+        sub.status === "active"
+    )
   }
 
   return (
@@ -104,6 +124,7 @@ export function SubscriptionsProvider({ children }) {
       value={{
         subscriptions: subscriptionsWithStatus,
         activateSubscription,
+        replaceSubscription,
         incrementVisit,
         getActiveSubscriptionByClient,
       }}

@@ -9,17 +9,23 @@ import PaymentModal from "../../../components/modals/PaymentModal"
 
 export default function ActivatePackageDrawer({
   client,
+  editSubscription = null,
   onClose,
 }) {
   const { packages } = usePackages()
   const { addTransaction: addFinanceTx } = useTransactions()
-  const { activateSubscription } = useSubscriptionsContext()
+  const {
+    activateSubscription,
+    replaceSubscription,
+  } = useSubscriptionsContext()
 
   const [selected, setSelected] = useState(null)
   const [showPayment, setShowPayment] = useState(false)
   const [processing, setProcessing] = useState(false)
 
   const checkId = useMemo(() => `SUB-${Date.now()}`, [])
+
+  const isEditMode = !!editSubscription
 
   return (
     <>
@@ -33,7 +39,7 @@ export default function ActivatePackageDrawer({
           <div className="p-6 border-b border-white/10 flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-white">
-                Activate Package
+                {isEditMode ? "Edit Package" : "Activate Package"}
               </h2>
               <p className="text-xs text-gray-400 mt-1">
                 {client?.firstName} {client?.lastName}
@@ -56,7 +62,6 @@ export default function ActivatePackageDrawer({
                       ? "border-indigo-500 bg-indigo-600/10"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
                   }
-                  ${processing ? "opacity-50 pointer-events-none" : ""}
                 `}
               >
                 <div className="flex justify-between items-center">
@@ -108,7 +113,42 @@ export default function ActivatePackageDrawer({
             try {
               const { amounts, comment } = paymentData
 
-              /* SERVICE TX */
+              /* 🔥 EDIT COMMENT MAJBURIY */
+              if (isEditMode && !comment?.trim()) {
+                alert("Comment is required for edit")
+                setProcessing(false)
+                return
+              }
+
+              /* ===========================
+                 🔥 AGAR EDIT BO‘LSA
+              ============================ */
+
+              if (isEditMode) {
+                // 1️⃣ Eski subscriptionni replaced qilamiz
+                replaceSubscription(editSubscription.id, comment)
+
+                // 2️⃣ Eski service summani minus bilan qaytaramiz
+                addFinanceTx({
+                  type: "service",
+                  category: "package",
+                  clientId: client.id,
+                  amount: -Number(
+                    editSubscription.packageSnapshot?.price || 0
+                  ),
+                  meta: {
+                    rollback: true,
+                    replacedPackage:
+                      editSubscription.packageSnapshot?.name,
+                    comment,
+                  },
+                })
+              }
+
+              /* ===========================
+                 YANGI SERVICE TX
+              ============================ */
+
               addFinanceTx({
                 type: "service",
                 category: "package",
@@ -117,24 +157,34 @@ export default function ActivatePackageDrawer({
                 meta: {
                   packageId: selected.id,
                   packageName: selected.name,
+                  editedFrom:
+                    editSubscription?.packageSnapshot?.name || null,
                 },
               })
 
-              /* PAYMENT TX */
-              Object.entries(amounts).forEach(([method, amount]) => {
-                if (Number(amount) > 0) {
-                  addFinanceTx({
-                    type: "payment",
-                    category: "package",
-                    clientId: client.id,
-                    amount: Number(amount),
-                    paymentMethod: method,
-                    comment,
-                  })
-                }
-              })
+              /* ===========================
+                 PAYMENT TX
+              ============================ */
 
-              /* 🔥 TO‘G‘RI ACTIVATE */
+              Object.entries(amounts).forEach(
+                ([method, amount]) => {
+                  if (Number(amount) > 0) {
+                    addFinanceTx({
+                      type: "payment",
+                      category: "package",
+                      clientId: client.id,
+                      amount: Number(amount),
+                      paymentMethod: method,
+                      comment,
+                    })
+                  }
+                }
+              )
+
+              /* ===========================
+                 YANGI SUB
+              ============================ */
+
               activateSubscription(client, selected)
 
               setShowPayment(false)
