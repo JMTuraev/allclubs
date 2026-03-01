@@ -1,5 +1,6 @@
 import { useTransactions } from "../../context/transaction/TransactionContext"
 import { useClientsContext } from "../../modules/clients/domain/ClientsContext"
+import { useEffect } from "react"
 
 import { useFinanceFilters } from "./domain/useFinanceFilters"
 import { useClientBalances } from "./domain/useClientBalances"
@@ -9,9 +10,14 @@ import ClientBalancesCard from "./ui/ClientBalancesCard"
 import TransactionsTable from "./ui/TransactionsTable"
 
 export default function FinancePage() {
-  const { transactions } = useTransactions()
+
+  // 🔥 MUHIM: activeTransactions ni olamiz
+  const { activeTransactions } = useTransactions()
   const { clients } = useClientsContext()
 
+  useEffect(() => {
+  console.log("TX:", activeTransactions)
+}, [activeTransactions])
   const {
     activeTab,
     clientParam,
@@ -20,7 +26,7 @@ export default function FinancePage() {
     changeTab,
     setClientFilter,
     clearClientFilter
-  } = useFinanceFilters(transactions)
+  } = useFinanceFilters(activeTransactions)
 
   const balances = useClientBalances(
     dateFilteredTransactions,
@@ -55,6 +61,7 @@ export default function FinancePage() {
           onClearClient={clearClientFilter}
         />
       )}
+
     </div>
   )
 }

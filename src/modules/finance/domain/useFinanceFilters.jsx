@@ -4,52 +4,52 @@ import { useSearchParams } from "react-router-dom"
 export function useFinanceFilters(transactions) {
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const urlDate = searchParams.get("date")
+  const from = searchParams.get("from")
+  const to = searchParams.get("to")
   const clientParam = searchParams.get("client")
   const activeTab = searchParams.get("tab") || "overview"
 
-  /* DATE FILTER */
+  /* ========================= */
+  /* 📅 DATE FILTER (RANGE SAFE) */
+  /* ========================= */
 
   const dateFilteredTransactions = useMemo(() => {
-    let result = [...transactions]
 
-    if (urlDate) {
-      const selected = new Date(urlDate)
+    if (!from && !to) return transactions
 
-      const start = new Date(
-        selected.getFullYear(),
-        selected.getMonth(),
-        selected.getDate()
-      )
+    const start = from ? new Date(from + "T00:00:00") : null
+    const end = to ? new Date(to + "T23:59:59") : null
 
-      const end = new Date(
-        selected.getFullYear(),
-        selected.getMonth(),
-        selected.getDate() + 1
-      )
+    return transactions.filter((t) => {
+      if (!t?.createdAt) return false
 
-      result = result.filter(
-        (t) =>
-          new Date(t.createdAt) >= start &&
-          new Date(t.createdAt) < end
-      )
-    }
+      const txDate = new Date(t.createdAt)
 
-    return result
-  }, [transactions, urlDate])
+      if (start && txDate < start) return false
+      if (end && txDate > end) return false
 
-  /* CLIENT FILTER */
+      return true
+    })
+
+  }, [transactions, from, to])
+
+  /* ========================= */
+  /* 👤 CLIENT FILTER         */
+  /* ========================= */
 
   const finalTransactions = useMemo(() => {
+
     if (!clientParam) return dateFilteredTransactions
 
     return dateFilteredTransactions.filter(
-      (t) =>
-        String(t.clientId) === String(clientParam)
+      (t) => String(t.clientId) === String(clientParam)
     )
+
   }, [dateFilteredTransactions, clientParam])
 
-  /* HANDLERS */
+  /* ========================= */
+  /* 🔧 HANDLERS (SAFE)       */
+  /* ========================= */
 
   const changeTab = (tab) => {
     const params = new URLSearchParams(searchParams)

@@ -14,6 +14,7 @@ import {
   useSearchParams,
 } from "react-router-dom"
 
+import { useCallback } from "react"
 import Filter from "./Filter"
 
 export default function Header({ setSidebarOpen }) {
@@ -22,7 +23,6 @@ export default function Header({ setSidebarOpen }) {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const path = location.pathname
-  const urlDate = searchParams.get("date")
 
   const isSessionsPage = path === "/app/sessions"
   const isFinancePage = path === "/app/finance"
@@ -38,8 +38,68 @@ export default function Header({ setSidebarOpen }) {
 
   const activeTab = searchParams.get("tab") || "templates"
 
+  /* ===================================================== */
+  /* SAFE SEARCH PARAM UPDATE (NO INFINITE LOOP)          */
+  /* ===================================================== */
+
+  const updateSearchParams = useCallback(
+    (updater) => {
+      const current = new URLSearchParams(searchParams)
+      const next = new URLSearchParams(searchParams)
+
+      updater(next)
+
+      if (current.toString() !== next.toString()) {
+        setSearchParams(next)
+      }
+    },
+    [searchParams, setSearchParams]
+  )
+
+  /* ===================================================== */
+  /* TAB CHANGE                                           */
+  /* ===================================================== */
+
   const changeTab = (tab) => {
-    setSearchParams({ tab })
+    updateSearchParams((params) => {
+      params.set("tab", tab)
+    })
+  }
+
+  /* ===================================================== */
+  /* FILTER → URL (RANGE READY)                          */
+  /* ===================================================== */
+
+  const handleDateChange = (payload) => {
+    updateSearchParams((params) => {
+
+      // eski date param bo‘lsa o‘chiramiz
+      params.delete("date")
+
+      if (!payload || payload.type === "all") {
+        params.delete("from")
+        params.delete("to")
+        return
+      }
+
+      if (payload.from) {
+        params.set(
+          "from",
+          payload.from.toISOString().slice(0, 10)
+        )
+      } else {
+        params.delete("from")
+      }
+
+      if (payload.to) {
+        params.set(
+          "to",
+          payload.to.toISOString().slice(0, 10)
+        )
+      } else {
+        params.delete("to")
+      }
+    })
   }
 
   const openBar = () => {
@@ -47,19 +107,9 @@ export default function Header({ setSidebarOpen }) {
     window.open(url, "_blank", "noopener,noreferrer")
   }
 
-  const formattedDate = (() => {
-    if (!urlDate) return null
-    const d = new Date(urlDate)
-    return d.toLocaleDateString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })
-  })()
-
   return (
     <div className="sticky top-0 z-40 flex h-16 items-center border-b border-white/10 bg-gray-900 px-6">
-      
+
       {/* LEFT */}
       <div className="flex items-center gap-6">
 
@@ -76,6 +126,12 @@ export default function Header({ setSidebarOpen }) {
           </h1>
         )}
 
+        {isFinancePage && (
+          <h1 className="text-lg font-semibold text-white">
+            Finance
+          </h1>
+        )}
+
         {isCreatePackagePage && (
           <HeaderBack title="Создать тариф" navigate={navigate} />
         )}
@@ -88,38 +144,29 @@ export default function Header({ setSidebarOpen }) {
           <HeaderBack title="Новый клиент" navigate={navigate} />
         )}
 
-        {/* PACKAGES TABS */}
         {isPackagesPage && !isCreatePackagePage && (
           <div className="flex gap-3 ml-4">
-
             <button
               onClick={() => changeTab("templates")}
-              className={`
-                px-4 py-2 rounded-xl text-sm font-medium transition-all
-                ${
-                  activeTab === "templates"
-                    ? "bg-indigo-600/20 text-indigo-400"
-                    : "text-gray-400 hover:text-white"
-                }
-              `}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                activeTab === "templates"
+                  ? "bg-indigo-600/20 text-indigo-400"
+                  : "text-gray-400 hover:text-white"
+              }`}
             >
               Package Templates
             </button>
 
             <button
               onClick={() => changeTab("sold")}
-              className={`
-                px-4 py-2 rounded-xl text-sm font-medium transition-all
-                ${
-                  activeTab === "sold"
-                    ? "bg-indigo-600/20 text-indigo-400"
-                    : "text-gray-400 hover:text-white"
-                }
-              `}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                activeTab === "sold"
+                  ? "bg-indigo-600/20 text-indigo-400"
+                  : "text-gray-400 hover:text-white"
+              }`}
             >
               Sold Packages
             </button>
-
           </div>
         )}
       </div>
@@ -128,13 +175,7 @@ export default function Header({ setSidebarOpen }) {
       <div className="ml-auto flex items-center gap-6">
 
         {(isSessionsPage || isFinancePage) && (
-          formattedDate ? (
-            <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm">
-              {formattedDate}
-            </div>
-          ) : (
-            <Filter onChange={() => {}} />
-          )
+          <Filter onChange={handleDateChange} />
         )}
 
         {isPackagesPage && !isCreatePackagePage && (
@@ -196,7 +237,6 @@ function HeaderBack({ title, navigate }) {
       >
         <ArrowLeftIcon className="h-5 w-5 text-white" />
       </button>
-
       <h1 className="text-lg font-semibold text-white">
         {title}
       </h1>

@@ -24,8 +24,9 @@ export default function ActivatePackageDrawer({
   const [processing, setProcessing] = useState(false)
 
   const checkId = useMemo(() => `SUB-${Date.now()}`, [])
-
   const isEditMode = !!editSubscription
+
+  const oldPackageId = editSubscription?.packageSnapshot?.id
 
   return (
     <>
@@ -51,32 +52,41 @@ export default function ActivatePackageDrawer({
             </button>
           </div>
 
+          {/* PACKAGE LIST */}
           <div className="flex-1 overflow-y-auto p-6 space-y-3">
-            {packages.map((pkg) => (
-              <div
-                key={pkg.id}
-                onClick={() => !processing && setSelected(pkg)}
-                className={`p-4 rounded-xl border cursor-pointer transition
-                  ${
-                    selected?.id === pkg.id
-                      ? "border-indigo-500 bg-indigo-600/10"
-                      : "border-white/10 bg-white/5 hover:bg-white/10"
-                  }
-                `}
-              >
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-white">
-                    {pkg.name}
-                  </span>
+            {packages.map((pkg) => {
+              const isSamePackage = isEditMode && pkg.id === oldPackageId
 
-                  <span className="text-sm text-indigo-400">
-                    {pkg.price.toLocaleString("ru-RU")} сум
-                  </span>
+              return (
+                <div
+                  key={pkg.id}
+                  onClick={() =>
+                    !processing && !isSamePackage && setSelected(pkg)
+                  }
+                  className={`p-4 rounded-xl border cursor-pointer transition
+                    ${
+                      selected?.id === pkg.id
+                        ? "border-indigo-500 bg-indigo-600/10"
+                        : "border-white/10 bg-white/5 hover:bg-white/10"
+                    }
+                    ${isSamePackage ? "opacity-40 pointer-events-none" : ""}
+                  `}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-white">
+                      {pkg.name}
+                    </span>
+
+                    <span className="text-sm text-indigo-400">
+                      {pkg.price.toLocaleString("ru-RU")} сум
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
+          {/* FOOTER */}
           {selected && (
             <div className="border-t border-white/10 p-6 mt-auto">
               <div className="flex justify-between text-gray-400 text-sm mb-4">
@@ -98,6 +108,7 @@ export default function ActivatePackageDrawer({
         </div>
       </div>
 
+      {/* PAYMENT MODAL */}
       {showPayment && selected && (
         <PaymentModal
           total={selected.price}
@@ -113,47 +124,44 @@ export default function ActivatePackageDrawer({
             try {
               const { amounts, comment } = paymentData
 
-              /* 🔥 EDIT COMMENT MAJBURIY */
               if (isEditMode && !comment?.trim()) {
                 alert("Comment is required for edit")
-                setProcessing(false)
                 return
               }
 
-              /* ===========================
-                 🔥 AGAR EDIT BO‘LSA
-              ============================ */
+              /* ================= EDIT LOGIC ================= */
 
               if (isEditMode) {
-                // 1️⃣ Eski subscriptionni replaced qilamiz
+                const oldPrice =
+                  Number(editSubscription.packageSnapshot?.price) || 0
+
+                // 1️⃣ Replace subscription
                 replaceSubscription(editSubscription.id, comment)
 
-                // 2️⃣ Eski service summani minus bilan qaytaramiz
-                addFinanceTx({
-                  type: "service",
-                  category: "package",
-                  clientId: client.id,
-                  amount: -Number(
-                    editSubscription.packageSnapshot?.price || 0
-                  ),
-                  meta: {
-                    rollback: true,
-                    replacedPackage:
-                      editSubscription.packageSnapshot?.name,
-                    comment,
-                  },
-                })
+                // 2️⃣ Refund old service (minus)
+                if (oldPrice > 0) {
+                  addFinanceTx({
+                    type: "service_refund",
+                    category: "package",
+                    clientId: client.id,
+                    amount: -oldPrice,
+                    meta: {
+                      replacedSubscriptionId: editSubscription.id,
+                      oldPackageName:
+                        editSubscription.packageSnapshot?.name,
+                    },
+                    comment: `Package edited refund`,
+                  })
+                }
               }
 
-              /* ===========================
-                 YANGI SERVICE TX
-              ============================ */
+              /* ================= NEW SERVICE ================= */
 
               addFinanceTx({
                 type: "service",
                 category: "package",
                 clientId: client.id,
-                amount: selected.price,
+                amount: Number(selected.price),
                 meta: {
                   packageId: selected.id,
                   packageName: selected.name,
@@ -162,28 +170,22 @@ export default function ActivatePackageDrawer({
                 },
               })
 
-              /* ===========================
-                 PAYMENT TX
-              ============================ */
+              /* ================= PAYMENT ================= */
 
-              Object.entries(amounts).forEach(
-                ([method, amount]) => {
-                  if (Number(amount) > 0) {
-                    addFinanceTx({
-                      type: "payment",
-                      category: "package",
-                      clientId: client.id,
-                      amount: Number(amount),
-                      paymentMethod: method,
-                      comment,
-                    })
-                  }
+              Object.entries(amounts).forEach(([method, amount]) => {
+                if (Number(amount) > 0) {
+                  addFinanceTx({
+                    type: "payment",
+                    category: "package",
+                    clientId: client.id,
+                    amount: Number(amount),
+                    paymentMethod: method,
+                    comment,
+                  })
                 }
-              )
+              })
 
-              /* ===========================
-                 YANGI SUB
-              ============================ */
+              /* ================= ACTIVATE NEW ================= */
 
               activateSubscription(client, selected)
 

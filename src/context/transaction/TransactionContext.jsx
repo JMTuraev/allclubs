@@ -10,9 +10,9 @@ export function TransactionProvider({ children }) {
   const addTransaction = (transaction) => {
     setTransactions((prev) => [
       {
-        id: Date.now(),
-        createdAt: new Date(),
-        status: "active", // active | cancelled
+        id: crypto.randomUUID(),   // 🔥 FIX
+        createdAt: new Date().toISOString(),
+        status: "active",
         ...transaction,
       },
       ...prev,
@@ -70,45 +70,6 @@ export function TransactionProvider({ children }) {
     return services - payments
   }
 
-  /* ================= CATEGORY ANALYTICS ================= */
-
-  const getCategoryAnalytics = () => {
-    const map = {}
-
-    activeTransactions.forEach((t) => {
-      if (!t.category) return
-
-      if (!map[t.category]) {
-        map[t.category] = {
-          services: 0,
-          payments: 0,
-          expenses: 0,
-        }
-      }
-
-      if (t.type === "service") {
-        map[t.category].services += Number(t.amount)
-      }
-
-      if (t.type === "payment") {
-        map[t.category].payments += Number(t.amount)
-      }
-
-      if (t.type === "expense") {
-        map[t.category].expenses += Number(t.amount)
-      }
-    })
-
-    return Object.entries(map).map(([category, data]) => ({
-      category,
-      services: data.services,
-      payments: data.payments,
-      expenses: data.expenses,
-      realCash: data.payments,
-      profit: data.payments - data.expenses,
-    }))
-  }
-
   /* ================= PROVIDER VALUE ================= */
 
   const value = useMemo(
@@ -119,7 +80,6 @@ export function TransactionProvider({ children }) {
       updateTransactionBySource,
       cancelTransactionBySource,
       getClientBalance,
-      getCategoryAnalytics,
     }),
     [transactions, activeTransactions]
   )

@@ -13,7 +13,10 @@ export default function Filter({ onChange }) {
 
   const ref = useRef(null)
 
-  // Close on outside click
+  /* ========================= */
+  /* CLOSE ON OUTSIDE CLICK   */
+  /* ========================= */
+
   useEffect(() => {
     const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
@@ -24,10 +27,94 @@ export default function Filter({ onChange }) {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  // Notify parent (Header → AppLayout → Pages)
-  useEffect(() => {
-    onChange?.({ activeFilter, range })
-  }, [activeFilter, range, onChange])
+  /* ========================= */
+  /* SAFE EMIT FUNCTION       */
+  /* ========================= */
+
+  const emitChange = (type, from = null, to = null) => {
+    onChange?.({
+      type,
+      from,
+      to,
+    })
+  }
+
+  /* ========================= */
+  /* QUICK FILTER HANDLER     */
+  /* ========================= */
+
+  const applyQuickFilter = (value) => {
+    const now = new Date()
+
+    setActiveFilter(value)
+    setOpen(false)
+
+    if (value === "today") {
+      emitChange("today", now, now)
+      return
+    }
+
+    if (value === "yesterday") {
+      const y = new Date()
+      y.setDate(y.getDate() - 1)
+      emitChange("yesterday", y, y)
+      return
+    }
+
+    if (value === "7") {
+      const from = new Date()
+      from.setDate(from.getDate() - 6)
+      emitChange("7", from, now)
+      return
+    }
+
+    if (value === "30") {
+      const from = new Date()
+      from.setDate(from.getDate() - 29)
+      emitChange("30", from, now)
+      return
+    }
+
+    if (value === "month") {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1)
+      emitChange("month", first, now)
+      return
+    }
+
+    if (value === "all") {
+      emitChange("all", null, null)
+      return
+    }
+  }
+
+  /* ========================= */
+  /* CUSTOM RANGE HANDLER     */
+  /* ========================= */
+
+  const handleSelect = (date) => {
+    setActiveFilter("custom")
+
+    if (!range.from || (range.from && range.to)) {
+      setRange({ from: date, to: null })
+    } else {
+      let newFrom = range.from
+      let newTo = date
+
+      if (date < range.from) {
+        newFrom = date
+        newTo = range.from
+      }
+
+      setRange({ from: newFrom, to: newTo })
+
+      setOpen(false)
+      emitChange("custom", newFrom, newTo)
+    }
+  }
+
+  /* ========================= */
+  /* LABEL                    */
+  /* ========================= */
 
   const label = useMemo(() => {
     if (activeFilter === "today") return "Today"
@@ -43,6 +130,10 @@ export default function Filter({ onChange }) {
 
     return "Filter"
   }, [activeFilter, range])
+
+  /* ========================= */
+  /* CALENDAR HELPERS         */
+  /* ========================= */
 
   const currentMonth = new Date(
     today.getFullYear(),
@@ -66,20 +157,6 @@ export default function Filter({ onChange }) {
     )
   }
 
-  const handleSelect = (date) => {
-    setActiveFilter("custom")
-
-    if (!range.from || (range.from && range.to)) {
-      setRange({ from: date, to: null })
-    } else {
-      if (date < range.from) {
-        setRange({ from: date, to: range.from })
-      } else {
-        setRange({ from: range.from, to: date })
-      }
-    }
-  }
-
   const isSame = (a, b) =>
     a && b && a.toDateString() === b.toDateString()
 
@@ -87,6 +164,10 @@ export default function Filter({ onChange }) {
     if (!range.from || !range.to) return false
     return d >= range.from && d <= range.to
   }
+
+  /* ========================= */
+  /* UI                       */
+  /* ========================= */
 
   return (
     <div className="relative" ref={ref}>
@@ -100,7 +181,7 @@ export default function Filter({ onChange }) {
 
       {open && (
         <div className="absolute right-0 top-14 z-50 bg-[#0f172a] border border-white/10 rounded-2xl p-6 w-[850px] shadow-2xl flex gap-8">
-          
+
           {/* CALENDAR */}
           <div className="flex gap-12">
             {months.map((m, idx) => (
@@ -164,10 +245,7 @@ export default function Filter({ onChange }) {
             ].map(([label, value]) => (
               <button
                 key={value}
-                onClick={() => {
-                  setActiveFilter(value)
-                  setOpen(false)
-                }}
+                onClick={() => applyQuickFilter(value)}
                 className={`block text-left ${
                   activeFilter === value
                     ? "text-white font-medium"
@@ -178,6 +256,7 @@ export default function Filter({ onChange }) {
               </button>
             ))}
           </div>
+
         </div>
       )}
     </div>
