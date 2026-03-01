@@ -1,4 +1,9 @@
-import { createContext, useContext, useState, useMemo } from "react"
+import {
+  createContext,
+  useContext,
+  useState,
+  useMemo,
+} from "react"
 
 const SubscriptionsContext = createContext(null)
 
@@ -46,10 +51,11 @@ export function SubscriptionsProvider({ children }) {
 
       startedAt: startedAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
-      createdAt: new Date().toISOString(),
+      createdAt: startedAt.toISOString(),
 
-      status: "active",
+      status: "active", // active | expired | replaced
       replaceComment: null,
+      correctionComment: null,
     }
 
     setSubscriptions((prev) => [...prev, newSubscription])
@@ -59,16 +65,35 @@ export function SubscriptionsProvider({ children }) {
 
   const replaceSubscription = (oldId, comment) => {
     setSubscriptions((prev) =>
-      prev.map((sub) => {
-        if (sub.id !== oldId) return sub
+      prev.map((sub) =>
+        sub.id !== oldId
+          ? sub
+          : {
+              ...sub,
+              status: "replaced",
+              expiresAt: new Date().toISOString(),
+              replaceComment: comment || "Replaced manually",
+            }
+      )
+    )
+  }
 
-        return {
-          ...sub,
-          status: "replaced",
-          expiresAt: new Date().toISOString(),
-          replaceComment: comment || null,
-        }
-      })
+  /* ================= CORRECT ================= */
+
+  const correctSubscription = (id, updates, comment) => {
+    setSubscriptions((prev) =>
+      prev.map((sub) =>
+        sub.id !== id
+          ? sub
+          : {
+              ...sub,
+              packageSnapshot: {
+                ...sub.packageSnapshot,
+                ...updates,
+              },
+              correctionComment: comment || "Corrected manually",
+            }
+      )
     )
   }
 
@@ -88,7 +113,7 @@ export function SubscriptionsProvider({ children }) {
     )
   }
 
-  /* ================= DERIVED ================= */
+  /* ================= DERIVED STATUS ================= */
 
   const subscriptionsWithStatus = useMemo(() => {
     const now = new Date()
@@ -106,10 +131,12 @@ export function SubscriptionsProvider({ children }) {
 
       return {
         ...sub,
-        status: isExpired ? "expired" : "active",
+        status: isExpired ? "expired" : sub.status,
       }
     })
   }, [subscriptions])
+
+  /* ================= SELECTORS ================= */
 
   const getActiveSubscriptionByClient = (clientId) => {
     return subscriptionsWithStatus.find(
@@ -119,14 +146,31 @@ export function SubscriptionsProvider({ children }) {
     )
   }
 
+  const getSubscriptionsByClient = (clientId) => {
+    return subscriptionsWithStatus.filter(
+      (sub) =>
+        String(sub.clientId) === String(clientId)
+    )
+  }
+
+  const getSubscriptionById = (id) =>
+    subscriptionsWithStatus.find(
+      (sub) => String(sub.id) === String(id)
+    )
+
   return (
     <SubscriptionsContext.Provider
       value={{
         subscriptions: subscriptionsWithStatus,
+
         activateSubscription,
         replaceSubscription,
+        correctSubscription,
         incrementVisit,
+
         getActiveSubscriptionByClient,
+        getSubscriptionsByClient,
+        getSubscriptionById,
       }}
     >
       {children}
@@ -136,9 +180,10 @@ export function SubscriptionsProvider({ children }) {
 
 export function useSubscriptionsContext() {
   const context = useContext(SubscriptionsContext)
-  if (!context)
+  if (!context) {
     throw new Error(
       "useSubscriptionsContext must be used inside SubscriptionsProvider"
     )
+  }
   return context
 }

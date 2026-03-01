@@ -116,7 +116,7 @@ export default function ClientsTable({ clients }) {
                     <div
                       className="flex items-center gap-4 cursor-pointer"
                       onClick={() =>
-                        navigate(`/clients/${client.id}`)
+                        navigate(`/app/clients/${client.id}`)
                       }
                     >
                       <img

@@ -1,36 +1,48 @@
 import Chart from "react-apexcharts"
 import { ChartBarIcon } from "@heroicons/react/24/outline"
+import { useMemo } from "react"
 
-export default function ClientRevenueChart({ data }) {
+export default function ClientRevenueChart({ payments = [] }) {
+  const last30Days = useMemo(() => {
+    const days = []
+    const now = new Date()
+
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date()
+      date.setDate(now.getDate() - i)
+
+      const dayTotal = payments
+        .filter(
+          (p) =>
+            new Date(p.createdAt).toDateString() ===
+            date.toDateString()
+        )
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+
+      days.push({ date, value: dayTotal })
+    }
+
+    return days
+  }, [payments])
+
   const series = [
     {
       name: "Доход",
-      data: data.map((d) => d.value),
+      data: last30Days.map((d) => d.value),
     },
   ]
 
   const options = {
-    chart: { type: "line", toolbar: { show: false }, zoom: { enabled: false }, background: "transparent", foreColor: "#9CA3AF" },
+    chart: { type: "line", toolbar: { show: false } },
     colors: ["#6366F1"],
     stroke: { curve: "smooth", width: 2 },
-    markers: { size: 3 },
-    grid: { borderColor: "#1f2937" },
     xaxis: {
-      categories: data.map((d) =>
-        d.date.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })
+      categories: last30Days.map((d) =>
+        d.date.toLocaleDateString("ru-RU", {
+          day: "2-digit",
+          month: "short",
+        })
       ),
-      tickAmount: 6,
-    },
-    yaxis: {
-      labels: {
-        formatter: (val) => val.toLocaleString("ru-RU") + " сум",
-      },
-    },
-    tooltip: {
-      theme: "dark",
-      y: {
-        formatter: (val) => val.toLocaleString("ru-RU") + " сум",
-      },
     },
     theme: { mode: "dark" },
   }
@@ -41,7 +53,13 @@ export default function ClientRevenueChart({ data }) {
         <ChartBarIcon className="w-4 h-4" />
         Доход за последние 30 дней
       </h2>
-      <Chart options={options} series={series} type="line" height={220} />
+
+      <Chart
+        options={options}
+        series={series}
+        type="line"
+        height={220}
+      />
     </div>
   )
 }

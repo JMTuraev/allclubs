@@ -7,7 +7,8 @@ import { ClientsProvider } from "./modules/clients/domain/ClientsContext"
 import { SessionsProvider } from "./modules/sessions/domain/SessionsContext"
 import { PackagesProvider } from "./modules/packages/domain/PackagesContext"
 import { TransactionProvider } from "./context/transaction/TransactionContext"
-import { SubscriptionsProvider } from "./modules/subscriptions/domain/SubscriptionsContext" // 🔥 NEW
+import { SubscriptionsProvider } from "./modules/subscriptions/domain/SubscriptionsContext"
+import { AuditProvider } from "./modules/audit/AuditContext"
 
 /* ================= LAYOUTS ================= */
 import PublicLayout from "./layouts/PublicLayout"
@@ -28,7 +29,6 @@ import CreatePackage from "./pages/packages/CreatePackage"
 import StaffList from "./pages/StaffList"
 import CreateStaff from "./pages/CreateStaff"
 import AuditPage from "./pages/audit/AuditPage"
-import { AuditProvider } from "./modules/audit/AuditContext"
 
 /* ================= CLIENTS ================= */
 import ClientsPage from "./pages/clients/ClientsPage"
@@ -65,105 +65,84 @@ export default function App() {
 
   return (
     <AuditProvider>
-    <ProductProvider>
-      <ClientsProvider>
-        <PackagesProvider>
-          <SubscriptionsProvider> {/* 🔥 NEW */}
-            <SessionsProvider>
-              <TransactionProvider>
-                <BrowserRouter>
-                  <Routes>
+      <ProductProvider>
+        <ClientsProvider>
+          <PackagesProvider>
+            <SubscriptionsProvider>
+              <SessionsProvider>
+                <TransactionProvider>
+                  <BrowserRouter>
+                    <Routes>
 
-                    {/* ================= PUBLIC ================= */}
-                    <Route element={<PublicLayout />}>
-                      <Route path="/" element={<Home />} />
-                      <Route path="/pricing" element={<Pricing />} />
-                      <Route path="/contacts" element={<Contact />} />
-                      <Route path="/login" element={<Login />} />
-                      <Route path="/create-club" element={<CreateClub />} />
-                    </Route>
+                      {/* ================= PUBLIC ================= */}
+                      <Route element={<PublicLayout />}>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/pricing" element={<Pricing />} />
+                        <Route path="/contacts" element={<Contact />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/create-club" element={<CreateClub />} />
+                      </Route>
 
-                    {/* ================= PROFILE ================= */}
-                    <Route
-                      path="/clients/:id"
-                      element={<ClientProfilePage />}
-                    />
+                      {/* ================= DASHBOARD (APP) ================= */}
+                      <Route path="/app/*" element={<AppLayout />}>
 
-                    {/* ================= DASHBOARD ================= */}
-                    <Route path="/app/*" element={<AppLayout />}>
+                        <Route
+                          index
+                          element={<Navigate to="dashboard" replace />}
+                        />
+
+                        <Route path="dashboard" element={<Dashboard />} />
+
+                        {/* PACKAGES */}
+                        <Route path="packages" element={<PackagesPage />} />
+                        <Route path="packages/create" element={<CreatePackage />} />
+
+                        {/* FINANCE */}
+                        <Route path="finance" element={<FinancePage />} />
+
+                        {/* STAFF */}
+                        <Route path="staffs" element={<StaffList />} />
+                        <Route path="staffs/create" element={<CreateStaff />} />
+
+                        {/* CLIENTS */}
+                        <Route path="clients" element={<ClientsPage />} />
+                        <Route path="clients/create" element={<CreateClient />} />
+                        <Route path="clients/:id" element={<ClientProfilePage />} />
+
+                        {/* SESSIONS */}
+                        <Route path="sessions" element={<SessionsPage />} />
+
+                        {/* AUDIT */}
+                        <Route path="audit" element={<AuditPage />} />
+
+                      </Route>
+
+                      {/* ================= BAR MODULE ================= */}
+                      <Route path="/bar/*" element={<BarLayout />}>
+                        <Route
+                          index
+                          element={<Navigate to="incoming" replace />}
+                        />
+                        <Route path="incoming" element={<IncomingGoodsPage />} />
+                        <Route path="incoming/history" element={<IncomingHistoryPage />} />
+                        <Route path="new" element={<NewProductPage />} />
+                        <Route path="pos" element={<MenuPage />} />
+                      </Route>
+
+                      {/* ================= 404 ================= */}
                       <Route
-                        index
-                        element={<Navigate to="dashboard" replace />}
+                        path="*"
+                        element={<Navigate to="/" replace />}
                       />
 
-                      <Route path="dashboard" element={<Dashboard />} />
-
-                      {/* PACKAGES */}
-                      <Route path="packages" element={<PackagesPage />} />
-                      <Route
-                        path="packages/create"
-                        element={<CreatePackage />}
-                      />
-
-                      {/* FINANCE */}
-                      <Route path="finance" element={<FinancePage />} />
-
-                      {/* STAFF */}
-                      <Route path="staffs" element={<StaffList />} />
-                      <Route
-                        path="staffs/create"
-                        element={<CreateStaff />}
-                      />
-
-                      {/* CLIENTS */}
-                      <Route path="clients" element={<ClientsPage />} />
-                      <Route
-                        path="clients/create"
-                        element={<CreateClient />}
-                      />
-
-                      {/* SESSIONS */}
-                      <Route path="sessions" element={<SessionsPage />} />
-                    
-                      {/* Audit */}
-                      <Route path="audit" element={<AuditPage />} />
-                    
-                    </Route>
-                    
-                    
-
-                    {/* ================= BAR MODULE ================= */}
-                    <Route path="/bar/*" element={<BarLayout />}>
-                      <Route
-                        index
-                        element={<Navigate to="incoming" replace />}
-                      />
-                      <Route
-                        path="incoming"
-                        element={<IncomingGoodsPage />}
-                      />
-                      <Route
-                        path="incoming/history"
-                        element={<IncomingHistoryPage />}
-                      />
-                      <Route path="new" element={<NewProductPage />} />
-                      <Route path="pos" element={<MenuPage />} />
-                    </Route>
-
-                    {/* ================= 404 ================= */}
-                    <Route
-                      path="*"
-                      element={<Navigate to="/" replace />}
-                    />
-
-                  </Routes>
-                </BrowserRouter>
-              </TransactionProvider>
-            </SessionsProvider>
-          </SubscriptionsProvider> {/* 🔥 NEW */}
-        </PackagesProvider>
-      </ClientsProvider>
-    </ProductProvider>
+                    </Routes>
+                  </BrowserRouter>
+                </TransactionProvider>
+              </SessionsProvider>
+            </SubscriptionsProvider>
+          </PackagesProvider>
+        </ClientsProvider>
+      </ProductProvider>
     </AuditProvider>
   )
 }
