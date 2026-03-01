@@ -172,19 +172,27 @@ export default function ActivatePackageDrawer({
 
               /* ================= PAYMENT ================= */
 
-              Object.entries(amounts).forEach(([method, amount]) => {
-                if (Number(amount) > 0) {
-                  addFinanceTx({
-                    type: "payment",
-                    category: "package",
-                    clientId: client.id,
-                    amount: Number(amount),
-                    paymentMethod: method,
-                    comment,
-                  })
-                }
-              })
+          Object.entries(amounts).forEach(([method, amount]) => {
+  if (Number(amount) > 0) {
+    addFinanceTx({
+      type: "payment",
+      category: "package",
+      clientId: client.id,
+      amount: Number(amount),
+      paymentMethod: method,
+      comment,
 
+      // 🔥 ENG MUHIM
+      meta: {
+        packageId: selected.id,
+        packageName: selected.name,
+        subscriptionId: editSubscription?.id || null,
+        editedFrom:
+          editSubscription?.packageSnapshot?.name || null,
+      },
+    })
+  }
+})
               /* ================= ACTIVATE NEW ================= */
 
               activateSubscription(client, selected)

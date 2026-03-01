@@ -11,13 +11,14 @@ import TransactionsTable from "./ui/TransactionsTable"
 
 export default function FinancePage() {
 
-  // 🔥 MUHIM: activeTransactions ni olamiz
-  const { activeTransactions } = useTransactions()
+  // 🔥 MUHIM: replacePayment ni ham olamiz
+  const { activeTransactions, replacePayment } = useTransactions()
   const { clients } = useClientsContext()
 
   useEffect(() => {
-  console.log("TX:", activeTransactions)
-}, [activeTransactions])
+    console.log("TX:", activeTransactions)
+  }, [activeTransactions])
+
   const {
     activeTab,
     clientParam,
@@ -59,6 +60,7 @@ export default function FinancePage() {
           clientParam={clientParam}
           filteredClient={filteredClient}
           onClearClient={clearClientFilter}
+          onReplacePayment={replacePayment}   
         />
       )}
 

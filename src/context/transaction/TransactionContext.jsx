@@ -10,7 +10,7 @@ export function TransactionProvider({ children }) {
   const addTransaction = (transaction) => {
     setTransactions((prev) => [
       {
-        id: crypto.randomUUID(),   // 🔥 FIX
+        id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         status: "active",
         ...transaction,
@@ -41,6 +41,38 @@ export function TransactionProvider({ children }) {
           : t
       )
     )
+  }
+
+  /* ================= REPLACE PAYMENT (🔥 YANGI) ================= */
+
+  const replacePayment = (oldTx, amounts) => {
+    setTransactions((prev) => {
+
+      // 1️⃣ eski transactionni replaced qilamiz
+      const updated = prev.map((t) =>
+        t.id === oldTx.id
+          ? { ...t, status: "replaced" }
+          : t
+      )
+
+      // 2️⃣ split paymentlar yaratamiz
+      const newTransactions = Object.entries(amounts)
+        .filter(([_, amount]) => Number(amount) > 0)
+        .map(([method, amount]) => ({
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          status: "active",
+          type: "payment",
+          clientId: oldTx.clientId,
+          paymentMethod: method,
+          amount: Number(amount),
+          source: oldTx.source || null,
+          sourceId: oldTx.sourceId || null,
+          meta: oldTx.meta || {}
+        }))
+
+      return [...updated, ...newTransactions]
+    })
   }
 
   /* ================= ACTIVE ONLY ================= */
@@ -79,6 +111,7 @@ export function TransactionProvider({ children }) {
       addTransaction,
       updateTransactionBySource,
       cancelTransactionBySource,
+      replacePayment, // 🔥 qo‘shildi
       getClientBalance,
     }),
     [transactions, activeTransactions]
@@ -92,5 +125,9 @@ export function TransactionProvider({ children }) {
 }
 
 export function useTransactions() {
-  return useContext(TransactionContext)
+  const context = useContext(TransactionContext)
+  if (!context) {
+    throw new Error("useTransactions must be used inside TransactionProvider")
+  }
+  return context
 }
