@@ -3,104 +3,123 @@ import { createContext, useContext, useState } from "react"
 const PackagesContext = createContext(null)
 
 export function PackagesProvider({ children }) {
-  const [packages, setPackages] = useState([
+
+  const calculateVisitLimit = (duration, bonusDays) => {
+    return Number(duration || 0) + Number(bonusDays || 0)
+  }
+
+const [packages, setPackages] = useState([
   {
-  id: 2,
-  name: "10 посещений",
-  duration: 30,
-  bonusDays: 0,
-  price: 500000,
+    id: 101,
+    name: "1 месяц стандарт",
+    duration: 30,
+    bonusDays: 0,
+    price: 450000,
 
-  isUnlimited: false,
-  visitLimit: 10,
+    visitLimit: 30, // 🔒 30 + 0
 
-  startTime: null,
-  endTime: null,
-  freezeEnabled: false,
-  maxFreezeDays: 0,
-  gender: "all",
+    startTime: null,
+    endTime: null,
+    freezeEnabled: false,
+    maxFreezeDays: 0,
+    gender: "all",
 
-  description: "Абонемент на 10 посещений в течение 30 дней.",
-  gradient: "from-emerald-500 to-emerald-700",
+    description: "Стандартный абонемент на 30 дней.",
+    gradient: "from-indigo-500 to-indigo-700",
 
-  isArchived: false,
-  createdAt: new Date().toISOString(),
-},
-{
-  id: 3,
-  name: "3 месяца",
-  duration: 90,
-  bonusDays: 5,
-  price: 800000,
+    isArchived: false,
+    createdAt: new Date().toISOString(),
+  },
 
-  isUnlimited: true,
-  visitLimit: null,
+  {
+    id: 102,
+    name: "3 месяца + бонус",
+    duration: 90,
+    bonusDays: 5,
+    price: 1200000,
 
-  startTime: null,
-  endTime: null,
-  freezeEnabled: true,
-  maxFreezeDays: 14,
-  gender: "all",
+    visitLimit: 95, // 🔒 90 + 5
 
-  description: "Безлимитный доступ на 3 месяца + 5 бонусных дней.",
-  gradient: "from-purple-500 to-purple-700",
+    startTime: null,
+    endTime: null,
+    freezeEnabled: true,
+    maxFreezeDays: 14,
+    gender: "all",
 
-  isArchived: false,
-  createdAt: new Date().toISOString(),
-},
-{
-  id: 4,
-  name: "Женский фитнес (день)",
-  duration: 30,
-  bonusDays: 0,
-  price: 350000,
+    description: "Абонемент на 3 месяца + 5 бонусных дней.",
+    gradient: "from-purple-500 to-purple-700",
 
-  isUnlimited: true,
-  visitLimit: null,
+    isArchived: false,
+    createdAt: new Date().toISOString(),
+  },
 
-  startTime: "08:00",
-  endTime: "16:00",
-  freezeEnabled: false,
-  maxFreezeDays: 0,
-  gender: "female",
+  {
+    id: 103,
+    name: "Утренний (07:00–12:00)",
+    duration: 30,
+    bonusDays: 0,
+    price: 300000,
 
-  description: "Дневной абонемент для женщин (08:00–16:00).",
-  gradient: "from-pink-500 to-rose-600",
+    visitLimit: 30, // 🔒 30 + 0
 
-  isArchived: false,
-  createdAt: new Date().toISOString(),
-},
-{
-  id: 5,
-  name: "Утренний (будни)",
-  duration: 30,
-  bonusDays: 0,
-  price: 250000,
+    startTime: "07:00",
+    endTime: "12:00",
+    freezeEnabled: false,
+    maxFreezeDays: 0,
+    gender: "all",
 
-  isUnlimited: false,
-  visitLimit: 20,
+    description: "Доступ только утром (07:00–12:00).",
+    gradient: "from-amber-500 to-orange-600",
 
-  startTime: "07:00",
-  endTime: "12:00",
-  freezeEnabled: true,
-  maxFreezeDays: 7,
-  gender: "all",
+    isArchived: false,
+    createdAt: new Date().toISOString(),
+  },
 
-  description: "Абонемент на будние дни утром (07:00–12:00).",
-  gradient: "from-orange-500 to-amber-600",
+  {
+    id: 104,
+    name: "Женский фитнес",
+    duration: 30,
+    bonusDays: 2,
+    price: 380000,
 
-  isArchived: false,
-  createdAt: new Date().toISOString(),
-}
-  ])
+    visitLimit: 32, // 🔒 30 + 2
+
+    startTime: "08:00",
+    endTime: "16:00",
+    freezeEnabled: true,
+    maxFreezeDays: 7,
+    gender: "female",
+
+    description: "Дневной абонемент для женщин (08:00–16:00).",
+    gradient: "from-pink-500 to-rose-600",
+
+    isArchived: false,
+    createdAt: new Date().toISOString(),
+  },
+])
 
   /* ================= ADD ================= */
 
   const addPackage = (pkg) => {
+
+    const duration = Number(pkg.duration)
+    const bonusDays = Number(pkg.bonusDays)
+    const price = Number(pkg.price)
+
+    if (duration <= 0 || price <= 0) return
+
+    const visitLimit = calculateVisitLimit(duration, bonusDays)
+
     setPackages(prev => [
       ...prev,
       {
         ...pkg,
+        duration,
+        bonusDays,
+        price,
+        visitLimit,     // 🔒 always auto
+        isUnlimited: false, // 🔒 forced
+
         id: Date.now(),
         isArchived: false,
         createdAt: new Date().toISOString(),
@@ -111,12 +130,42 @@ export function PackagesProvider({ children }) {
   /* ================= UPDATE ================= */
 
   const updatePackage = (id, updates) => {
+
     setPackages(prev =>
-      prev.map(p =>
-        p.id === id
-          ? { ...p, ...updates }
-          : p
-      )
+      prev.map(p => {
+        if (p.id !== id) return p
+
+        const duration = Number(
+          updates.duration ?? p.duration
+        )
+
+        const bonusDays = Number(
+          updates.bonusDays ?? p.bonusDays
+        )
+
+        const price = Number(
+          updates.price ?? p.price
+        )
+
+        if (duration <= 0 || price <= 0) {
+          return p
+        }
+
+        const visitLimit = calculateVisitLimit(
+          duration,
+          bonusDays
+        )
+
+        return {
+          ...p,
+          ...updates,
+          duration,
+          bonusDays,
+          price,
+          visitLimit,
+          isUnlimited: false, // 🔒 forced
+        }
+      })
     )
   }
 
@@ -141,8 +190,8 @@ export function PackagesProvider({ children }) {
   return (
     <PackagesContext.Provider
       value={{
-        packages: activePackages, // 🔥 UI faqat aktivlarni ko‘radi
-        allPackages: packages,    // 🔥 agar tarix kerak bo‘lsa
+        packages: activePackages,
+        allPackages: packages,
         addPackage,
         updatePackage,
         deletePackage,

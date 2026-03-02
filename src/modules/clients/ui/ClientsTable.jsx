@@ -16,7 +16,7 @@ export default function ClientsTable({ clients }) {
 
   const {
     getActiveSubscriptionByClient,
-    incrementVisit,
+    decrementVisit,
   } = useSubscriptionsContext()
 
   const [keyClient, setKeyClient] = useState(null)
@@ -46,7 +46,8 @@ export default function ClientsTable({ clients }) {
                 getActiveSubscriptionByClient(client.id)
 
               const hasActivePackage =
-                subscription && !subscription.isExpired
+                subscription &&
+                subscription.status === "active"
 
               /* ================= PROGRESS ================= */
 
@@ -58,11 +59,8 @@ export default function ClientsTable({ clients }) {
               if (hasActivePackage) {
                 const now = new Date()
 
-                visitsUsed = subscription.visitsUsed || 0
-                visitsTotal = subscription.visitsTotal || 0
-
-                const startDate = new Date(subscription.startedAt)
-                const expireDate = new Date(subscription.expiresAt)
+                const startDate = new Date(subscription.startDate)
+                const expireDate = new Date(subscription.endDate)
 
                 const totalDays =
                   (expireDate - startDate) /
@@ -77,10 +75,19 @@ export default function ClientsTable({ clients }) {
                     ? Math.min((usedDays / totalDays) * 100, 100)
                     : 0
 
-                if (subscription.packageSnapshot.isUnlimited) {
+                if (subscription.visitLimit === null) {
+                  // unlimited
                   visitPercent = daysPercent
                 } else {
-                  visitPercent =
+                  visitsTotal = subscription.visitLimit
+                  visitsUsed =
+                    subscription.visitLimit -
+                    subscription.remainingVisits
+
+                  visitsLeft =
+                    subscription.remainingVisits
+
+                  const visitUsagePercent =
                     visitsTotal > 0
                       ? Math.min(
                           (visitsUsed / visitsTotal) * 100,
@@ -88,9 +95,8 @@ export default function ClientsTable({ clients }) {
                         )
                       : 0
 
-                  visitsLeft = visitsTotal - visitsUsed
                   visitPercent = Math.max(
-                    visitPercent,
+                    visitUsagePercent,
                     daysPercent
                   )
                 }
@@ -98,8 +104,8 @@ export default function ClientsTable({ clients }) {
 
               const canCheckIn =
                 hasActivePackage &&
-                (subscription.packageSnapshot.isUnlimited ||
-                  visitsLeft > 0)
+                (subscription.visitLimit === null ||
+                  subscription.remainingVisits > 0)
 
               return (
                 <tr
@@ -147,7 +153,7 @@ export default function ClientsTable({ clients }) {
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 text-xs">
-                          {!subscription.packageSnapshot.isUnlimited && (
+                          {subscription.visitLimit !== null && (
                             <span className="text-gray-400">
                               {visitsUsed} / {visitsTotal}
                             </span>
@@ -246,7 +252,7 @@ export default function ClientsTable({ clients }) {
         />
       )}
 
-      {/* CHECK-IN MODAL */}
+      {/* CHECK-IN */}
       {keyClient && (
         <KeypadModal
           mode="checkin"
@@ -257,7 +263,8 @@ export default function ClientsTable({ clients }) {
                 keyClient.id
               )
 
-            if (!sub || sub.isExpired) return
+            if (!sub || sub.status !== "active")
+              return
 
             startSession({
               clientId: keyClient.id,
@@ -269,8 +276,8 @@ export default function ClientsTable({ clients }) {
               lockerCode,
             })
 
-            if (!sub.packageSnapshot.isUnlimited) {
-              incrementVisit(sub.id)
+            if (sub.visitLimit !== null) {
+              decrementVisit(sub.id)
             }
 
             setKeyClient(null)
@@ -278,7 +285,7 @@ export default function ClientsTable({ clients }) {
         />
       )}
 
-      {/* CLOSE SESSION MODAL */}
+      {/* CLOSE SESSION */}
       {closeData && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-[#111827] w-[400px] rounded-2xl p-6 space-y-5 border border-white/10">

@@ -8,12 +8,19 @@ export function TransactionProvider({ children }) {
   /* ================= ADD ================= */
 
   const addTransaction = (transaction) => {
+    if (!transaction?.clientId) {
+      console.warn("Transaction blocked: missing clientId")
+      return
+    }
+
     setTransactions((prev) => [
       {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         status: "active",
         ...transaction,
+        clientId: String(transaction.clientId),
+        amount: Number(transaction.amount) || 0,
       },
       ...prev,
     ])
@@ -43,19 +50,17 @@ export function TransactionProvider({ children }) {
     )
   }
 
-  /* ================= REPLACE PAYMENT (🔥 YANGI) ================= */
+  /* ================= REPLACE PAYMENT ================= */
 
   const replacePayment = (oldTx, amounts) => {
     setTransactions((prev) => {
 
-      // 1️⃣ eski transactionni replaced qilamiz
       const updated = prev.map((t) =>
         t.id === oldTx.id
           ? { ...t, status: "replaced" }
           : t
       )
 
-      // 2️⃣ split paymentlar yaratamiz
       const newTransactions = Object.entries(amounts)
         .filter(([_, amount]) => Number(amount) > 0)
         .map(([method, amount]) => ({
@@ -63,7 +68,7 @@ export function TransactionProvider({ children }) {
           createdAt: new Date().toISOString(),
           status: "active",
           type: "payment",
-          clientId: oldTx.clientId,
+          clientId: String(oldTx.clientId),
           paymentMethod: method,
           amount: Number(amount),
           source: oldTx.source || null,
@@ -88,7 +93,7 @@ export function TransactionProvider({ children }) {
     if (!clientId) return 0
 
     const clientTx = activeTransactions.filter(
-      (t) => t.clientId === clientId
+      (t) => String(t.clientId) === String(clientId)
     )
 
     const services = clientTx
@@ -111,7 +116,7 @@ export function TransactionProvider({ children }) {
       addTransaction,
       updateTransactionBySource,
       cancelTransactionBySource,
-      replacePayment, // 🔥 qo‘shildi
+      replacePayment,
       getClientBalance,
     }),
     [transactions, activeTransactions]

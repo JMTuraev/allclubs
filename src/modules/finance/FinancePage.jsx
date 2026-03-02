@@ -18,7 +18,7 @@ export default function FinancePage() {
   useEffect(() => {
     console.log("TX:", activeTransactions)
   }, [activeTransactions])
-
+console.log("TX:", activeTransactions)
   const {
     activeTab,
     clientParam,

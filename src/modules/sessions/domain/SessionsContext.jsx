@@ -1,14 +1,19 @@
 import { createContext, useContext, useReducer, useMemo } from "react"
 import { v4 as uuid } from "uuid"
 import { useAudit } from "../../audit/AuditContext"
+import { useSubscriptionsContext } from "../../subscriptions/domain/SubscriptionsContext"
 
 const SessionsContext = createContext()
+
+/* ================= HELPERS ================= */
 
 function calculateDuration(startedAt) {
   const start = new Date(startedAt)
   const end = new Date()
   return Math.floor((end - start) / 60000)
 }
+
+/* ================= REDUCER ================= */
 
 function reducer(state, action) {
   switch (action.type) {
@@ -24,6 +29,19 @@ function reducer(state, action) {
               status: "closed",
               endedAt: new Date().toISOString(),
               durationMinutes: calculateDuration(s.startedAt),
+            }
+          : s
+      )
+
+    case "VOID_SESSION":
+      return state.map(s =>
+        s.id === action.payload.sessionId
+          ? {
+              ...s,
+              status: "voided",
+              voidReason: action.payload.reason,
+              voidedBy: action.payload.staffName,
+              voidedAt: new Date().toISOString(),
             }
           : s
       )
@@ -53,9 +71,19 @@ function reducer(state, action) {
   }
 }
 
+/* ================= PROVIDER ================= */
+
 export function SessionsProvider({ children }) {
   const [sessions, dispatch] = useReducer(reducer, [])
-  const { addEvent } = useAudit() // 🔥 audit ulash
+  const { addEvent } = useAudit()
+
+  const {
+    getActiveSubscriptionByClient,
+    decrementVisit,
+    incrementVisit
+  } = useSubscriptionsContext()
+
+  /* ================= START SESSION ================= */
 
   const startSession = ({
     clientId,
@@ -63,12 +91,47 @@ export function SessionsProvider({ children }) {
     staffName,
     lockerCode,
   }) => {
+
+    // 1️⃣ Active session protection
+    const existingActive = sessions.find(
+      s =>
+        String(s.clientId) === String(clientId) &&
+        s.status === "active"
+    )
+
+    if (existingActive) {
+      throw new Error("Client already has active session")
+    }
+
+    // 2️⃣ Active subscription check
+    const subscription =
+      getActiveSubscriptionByClient(clientId)
+
+    if (!subscription || subscription.status !== "active") {
+      throw new Error("No active subscription")
+    }
+
+    // 3️⃣ Visit check (only if NOT unlimited)
+    if (
+      subscription.visitLimit !== null &&
+      subscription.remainingVisits <= 0
+    ) {
+      throw new Error("No remaining visits")
+    }
+
+    // 4️⃣ Decrement visit (only limited packages)
+    if (subscription.visitLimit !== null) {
+      decrementVisit(subscription.id)
+    }
+
     const newSession = {
       id: uuid(),
       clientId,
       clientName,
       staffName,
       lockerCode,
+
+      subscriptionId: subscription.id,
 
       startedAt: new Date().toISOString(),
       endedAt: null,
@@ -79,29 +142,74 @@ export function SessionsProvider({ children }) {
       transactions: [],
       totalAmount: 0,
       durationMinutes: 0,
+
+      voidReason: null,
+      voidedBy: null,
+      voidedAt: null,
     }
 
     dispatch({ type: "START_SESSION", payload: newSession })
 
-    // 🔥 AUDIT YOZISH
     addEvent({
       type: "SESSION_OPENED",
       sessionId: newSession.id,
-      clientName
+      clientName,
+      subscriptionId: subscription.id
     })
 
     return newSession
   }
 
+  /* ================= END SESSION ================= */
+
   const endSession = (id) => {
     dispatch({ type: "END_SESSION", payload: id })
 
-    // 🔥 AUDIT YOZISH
     addEvent({
       type: "SESSION_CLOSED",
       sessionId: id
     })
   }
+
+  /* ================= VOID SESSION ================= */
+
+  const voidSession = ({
+    sessionId,
+    reason,
+    staffName
+  }) => {
+
+    const session = sessions.find(
+      s => s.id === sessionId
+    )
+
+    if (!session) return
+    if (session.status === "voided") return
+
+    // 🔁 Return visit only if limited
+    if (session.subscriptionId) {
+      incrementVisit(session.subscriptionId)
+    }
+
+    dispatch({
+      type: "VOID_SESSION",
+      payload: {
+        sessionId,
+        reason,
+        staffName
+      }
+    })
+
+    addEvent({
+      type: "SESSION_VOIDED",
+      sessionId,
+      subscriptionId: session.subscriptionId,
+      reason,
+      staffName
+    })
+  }
+
+  /* ================= OTHER ================= */
 
   const markSessionsPaid = (ids) => {
     dispatch({ type: "MARK_PAID", payload: ids })
@@ -119,7 +227,6 @@ export function SessionsProvider({ children }) {
       payload: { sessionId, tx: newTx }
     })
 
-    // 🔥 optional audit
     addEvent({
       type: "TRANSACTION_ADDED",
       sessionId,
@@ -131,6 +238,7 @@ export function SessionsProvider({ children }) {
     sessions,
     startSession,
     endSession,
+    voidSession,
     addTransaction,
     markSessionsPaid
   }), [sessions])
@@ -141,6 +249,8 @@ export function SessionsProvider({ children }) {
     </SessionsContext.Provider>
   )
 }
+
+/* ================= HOOK ================= */
 
 export function useSessionsContext() {
   const ctx = useContext(SessionsContext)

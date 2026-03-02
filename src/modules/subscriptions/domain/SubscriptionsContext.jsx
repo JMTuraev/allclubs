@@ -7,251 +7,300 @@ import {
 
 const SubscriptionsContext = createContext(null)
 
+/* ================= HELPERS ================= */
+
+const addDays = (date, days) => {
+  const result = new Date(date)
+  result.setDate(result.getDate() + days)
+  return result
+}
+
+const calculateStatus = (sub) => {
+  const now = new Date()
+
+  if (sub.status === "replaced") return "replaced"
+  if (sub.status === "cancelled") return "cancelled"
+
+  const start = new Date(sub.startDate)
+  const end = new Date(sub.endDate)
+
+  if (now < start) return "scheduled"
+
+  if (
+    now > end ||
+    (sub.visitLimit !== null &&
+      sub.remainingVisits !== null &&
+      sub.remainingVisits <= 0)
+  ) {
+    return "expired"
+  }
+
+  return "active"
+}
+
+/* ================= PROVIDER ================= */
+
 export function SubscriptionsProvider({ children }) {
-  /* ================= MOCK DATA (TEST) ================= */
+  const [subscriptions, setSubscriptions] = useState([])
 
-  const [subscriptions, setSubscriptions] = useState([
-    {
-      id: "sub_1",
-      clientId: 125,
-      clientName: "Jafarali Turaev",
-      clientPhone: "+998 91 555 44 33",
+  /* ================= SELL ================= */
 
-      packageSnapshot: {
-        id: "pkg_1",
-        name: "10 посещений",
-        duration: 30,
-        isUnlimited: false,
-        visitsTotal: 10,
-        price: 500000,
-      },
+  const sellSubscription = (
+    client,
+    template,
+    customStartDate = null
+  ) => {
+    if (!client || !template) return null
 
-      visitsUsed: 3,
-      visitsTotal: 10,
+    const now = new Date()
+    const newId = crypto.randomUUID()
 
-      startedAt: "2026-03-01T00:00:00.000Z",
-      expiresAt: "2026-03-31T00:00:00.000Z",
-      createdAt: "2026-03-01T00:00:00.000Z",
+    setSubscriptions((prev) => {
 
-      status: "active",
-      replaceComment: null,
-      correctionComment: null,
-    },
-    {
-      id: "sub_2",
-      clientId: 125,
-      clientName: "Jafarali Turaev",
-      clientPhone: "+998 91 555 44 33",
+      const activeSub = prev.find(
+        (s) =>
+          String(s.clientId) === String(client.id) &&
+          calculateStatus(s) === "active"
+      )
 
-      packageSnapshot: {
-        id: "pkg_2",
-        name: "1 Month Unlimited",
-        duration: 30,
-        isUnlimited: true,
-        visitsTotal: null,
-        price: 700000,
-      },
+      let startDate
 
-      visitsUsed: 0,
-      visitsTotal: null,
+      if (activeSub) {
+        startDate = addDays(
+          new Date(activeSub.endDate),
+          1
+        )
+      } else {
+        startDate = customStartDate
+          ? new Date(customStartDate)
+          : now
+      }
 
-      startedAt: "2026-01-01T00:00:00.000Z",
-      expiresAt: "2026-01-31T00:00:00.000Z",
-      createdAt: "2026-01-01T00:00:00.000Z",
+      const duration =
+        Number(template.duration || 0) +
+        Number(template.bonusDays || 0)
 
-      status: "expired",
-      replaceComment: null,
-      correctionComment: null,
-    },
-    {
-      id: "sub_3",
-      clientId: 125,
-      clientName: "Jafarali Turaev",
-      clientPhone: "+998 91 555 44 33",
+      const endDate = addDays(startDate, duration)
 
-      packageSnapshot: {
-        id: "pkg_3",
-        name: "3 Months Pro",
-        duration: 90,
-        isUnlimited: false,
-        visitsTotal: 90,
-        price: 1500000,
-      },
+      const visitLimit =
+        template.isUnlimited ? null : template.visitLimit ?? null
 
-      visitsUsed: 65,
-      visitsTotal: 90,
+      const newSub = {
+        id: newId,
+        clientId: String(client.id),
+        clientName: `${client.firstName} ${client.lastName}`,
+        clientPhone: client.phone ?? "",
+        packageId: template.id,
+        packageSnapshot: { ...template },
+        soldAt: now.toISOString(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        visitLimit,
+        remainingVisits: visitLimit,
+        sessionsCount: 0,
+        freezeUsedDays: 0,
+        status:
+          startDate > now
+            ? "scheduled"
+            : "active",
+        replaceComment: null,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      }
 
-      startedAt: "2025-09-01T00:00:00.000Z",
-      expiresAt: "2025-12-01T00:00:00.000Z",
-      createdAt: "2025-09-01T00:00:00.000Z",
+      return [...prev, newSub]
+    })
 
-      status: "expired",
-      replaceComment: null,
-      correctionComment: null,
-    },
-  ])
+    return newId
+  }
 
-  /* ================= ACTIVATE ================= */
+  /* ================= SAFE REPLACE ================= */
 
-  const activateSubscription = (client, template) => {
-    if (!client || !template) return
-
-    const startedAt = new Date()
-    const duration = Number(template.duration) || 30
-
-    const expiresAt = new Date(startedAt)
-    expiresAt.setDate(startedAt.getDate() + duration)
-
-    const isUnlimited = Boolean(template.isUnlimited)
-
-    const visits =
-      isUnlimited
-        ? null
-        : Number(template.visitLimit) > 0
-        ? Number(template.visitLimit)
-        : 1
-
-    const newSubscription = {
-      id: crypto.randomUUID(),
-
-      clientId: client.id,
-      clientName: `${client.firstName} ${client.lastName}`,
-      clientPhone: client.phone ?? "",
-
-      packageSnapshot: {
-        id: template.id,
-        name: template.name,
-        duration,
-        isUnlimited,
-        visitsTotal: visits,
-        price: template.price ?? 0,
-      },
-
-      visitsUsed: 0,
-      visitsTotal: visits,
-
-      startedAt: startedAt.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-      createdAt: startedAt.toISOString(),
-
-      status: "active",
-      replaceComment: null,
-      correctionComment: null,
+  const replaceSubscription = (
+    oldSubscriptionId,
+    client,
+    template,
+    comment
+  ) => {
+    if (!comment?.trim()) {
+      throw new Error("Replace comment required")
     }
 
-    setSubscriptions((prev) => [...prev, newSubscription])
-  }
+    const now = new Date()
+    const newId = crypto.randomUUID()
 
-  /* ================= REPLACE ================= */
+    setSubscriptions((prev) => {
+      const oldSub = prev.find(
+        (s) => s.id === oldSubscriptionId
+      )
 
-  const replaceSubscription = (oldId, comment) => {
-    setSubscriptions((prev) =>
-      prev.map((sub) =>
-        sub.id !== oldId
-          ? sub
-          : {
+      if (!oldSub) return prev
+
+      if (oldSub.sessionsCount > 0) {
+        alert("Cannot replace subscription after session started")
+        return prev
+      }
+
+      const updated = prev.map((sub) =>
+        sub.id === oldSubscriptionId
+          ? {
               ...sub,
               status: "replaced",
-              expiresAt: new Date().toISOString(),
-              replaceComment:
-                comment || "Replaced manually",
+              endDate: now.toISOString(),
+              replaceComment: comment,
+              updatedAt: now.toISOString(),
             }
+          : sub
       )
-    )
-  }
 
-  /* ================= CORRECT ================= */
+      const duration =
+        Number(template.duration || 0) +
+        Number(template.bonusDays || 0)
 
-  const correctSubscription = (id, updates, comment) => {
-    setSubscriptions((prev) =>
-      prev.map((sub) =>
-        sub.id !== id
-          ? sub
-          : {
-              ...sub,
-              packageSnapshot: {
-                ...sub.packageSnapshot,
-                ...updates,
-              },
-              correctionComment:
-                comment || "Corrected manually",
-            }
-      )
-    )
+      const endDate = addDays(now, duration)
+
+      const visitLimit =
+        template.isUnlimited ? null : template.visitLimit ?? null
+
+      const newSub = {
+        id: newId,
+        clientId: String(client.id),
+        clientName: `${client.firstName} ${client.lastName}`,
+        clientPhone: client.phone ?? "",
+        packageId: template.id,
+        packageSnapshot: { ...template },
+        soldAt: now.toISOString(),
+        startDate: now.toISOString(),
+        endDate: endDate.toISOString(),
+        visitLimit,
+        remainingVisits: visitLimit,
+        sessionsCount: 0,
+        freezeUsedDays: 0,
+        status: "active",
+        replaceComment: null,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      }
+
+      return [...updated, newSub]
+    })
+
+    return newId
   }
 
   /* ================= VISIT ================= */
 
-  const incrementVisit = (subscriptionId) => {
+  const decrementVisit = (subscriptionId) => {
     setSubscriptions((prev) =>
       prev.map((sub) => {
-        if (sub.id !== subscriptionId) return sub
-        if (sub.packageSnapshot?.isUnlimited) return sub
+        if (sub.id !== subscriptionId)
+          return sub
+
+        const currentStatus =
+          calculateStatus(sub)
+
+        if (currentStatus !== "active")
+          return sub
+
+        if (
+          sub.visitLimit !== null &&
+          sub.remainingVisits <= 0
+        )
+          return sub
 
         return {
           ...sub,
-          visitsUsed: sub.visitsUsed + 1,
+          remainingVisits:
+            sub.visitLimit !== null
+              ? sub.remainingVisits - 1
+              : null,
+          sessionsCount:
+            sub.sessionsCount + 1,
+          updatedAt:
+            new Date().toISOString(),
         }
       })
     )
   }
 
-  /* ================= DERIVED STATUS ================= */
+  /* ================= CANCEL ================= */
 
-  const subscriptionsWithStatus = useMemo(() => {
-    const now = new Date()
+  const cancelSubscription = (
+    subscriptionId,
+    reason = ""
+  ) => {
+    setSubscriptions((prev) =>
+      prev.map((sub) => {
+        if (sub.id !== subscriptionId)
+          return sub
 
-    return subscriptions.map((sub) => {
-      if (sub.status === "replaced") return sub
+        const currentStatus =
+          calculateStatus(sub)
 
-      const expireDate = new Date(sub.expiresAt)
+        if (currentStatus !== "scheduled")
+          return sub
 
-      const isExpired =
-        expireDate.getTime() < now.getTime() ||
-        (!sub.packageSnapshot?.isUnlimited &&
-          sub.visitsTotal !== null &&
-          sub.visitsUsed >= sub.visitsTotal)
+        return {
+          ...sub,
+          status: "cancelled",
+          cancelReason: reason,
+          updatedAt:
+            new Date().toISOString(),
+        }
+      })
+    )
+  }
 
-      return {
+  /* ================= DERIVED ================= */
+
+  const subscriptionsWithStatus =
+    useMemo(() => {
+      return subscriptions.map((sub) => ({
         ...sub,
-        status: isExpired ? "expired" : "active",
-      }
-    })
-  }, [subscriptions])
+        status: calculateStatus(sub),
+      }))
+    }, [subscriptions])
 
   /* ================= SELECTORS ================= */
 
-  const getActiveSubscriptionByClient = (clientId) => {
-    return subscriptionsWithStatus.find(
-      (sub) =>
-        String(sub.clientId) === String(clientId) &&
-        sub.status === "active"
-    )
-  }
+  const getActiveSubscriptionByClient =
+    (clientId) =>
+      subscriptionsWithStatus.find(
+        (sub) =>
+          String(sub.clientId) === String(clientId) &&
+          sub.status === "active"
+      )
 
-  const getSubscriptionsByClient = (clientId) => {
-    return subscriptionsWithStatus.filter(
-      (sub) =>
-        String(sub.clientId) === String(clientId)
-    )
-  }
+  const getScheduledSubscriptionsByClient =
+    (clientId) =>
+      subscriptionsWithStatus.filter(
+        (sub) =>
+          String(sub.clientId) === String(clientId) &&
+          sub.status === "scheduled"
+      )
+
+  const getSubscriptionsByClient =
+    (clientId) =>
+      subscriptionsWithStatus.filter(
+        (sub) =>
+          String(sub.clientId) === String(clientId)
+      )
 
   const getSubscriptionById = (id) =>
     subscriptionsWithStatus.find(
-      (sub) => String(sub.id) === String(id)
+      (sub) => sub.id === id
     )
 
   return (
     <SubscriptionsContext.Provider
       value={{
         subscriptions: subscriptionsWithStatus,
-
-        activateSubscription,
+        sellSubscription,
         replaceSubscription,
-        correctSubscription,
-        incrementVisit,
-
+        decrementVisit,
+        cancelSubscription,
         getActiveSubscriptionByClient,
+        getScheduledSubscriptionsByClient,
         getSubscriptionsByClient,
         getSubscriptionById,
       }}
@@ -261,8 +310,11 @@ export function SubscriptionsProvider({ children }) {
   )
 }
 
+/* ================= HOOK ================= */
+
 export function useSubscriptionsContext() {
-  const context = useContext(SubscriptionsContext)
+  const context =
+    useContext(SubscriptionsContext)
 
   if (!context) {
     throw new Error(

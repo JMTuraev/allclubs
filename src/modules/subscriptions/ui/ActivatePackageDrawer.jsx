@@ -13,20 +13,29 @@ export default function ActivatePackageDrawer({
   onClose,
 }) {
   const { packages } = usePackages()
-  const { addTransaction: addFinanceTx } = useTransactions()
+
   const {
-    activateSubscription,
+    transactions,
+    addTransaction,
+  } = useTransactions()
+
+  const {
+    sellSubscription,
     replaceSubscription,
+    getActiveSubscriptionByClient,
   } = useSubscriptionsContext()
 
   const [selected, setSelected] = useState(null)
   const [showPayment, setShowPayment] = useState(false)
   const [processing, setProcessing] = useState(false)
 
-  const checkId = useMemo(() => `SUB-${Date.now()}`, [])
-  const isEditMode = !!editSubscription
+  const todayISO = new Date().toISOString().split("T")[0]
+  const [startDate, setStartDate] = useState(todayISO)
 
-  const oldPackageId = editSubscription?.packageSnapshot?.id
+  const checkId = useMemo(() => `SUB-${Date.now()}`, [])
+
+  const isEditMode = !!editSubscription
+  const activeSub = getActiveSubscriptionByClient(client?.id)
 
   return (
     <>
@@ -40,7 +49,7 @@ export default function ActivatePackageDrawer({
           <div className="p-6 border-b border-white/10 flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-white">
-                {isEditMode ? "Edit Package" : "Activate Package"}
+                {isEditMode ? "Replace Package" : "Activate Package"}
               </h2>
               <p className="text-xs text-gray-400 mt-1">
                 {client?.firstName} {client?.lastName}
@@ -52,16 +61,39 @@ export default function ActivatePackageDrawer({
             </button>
           </div>
 
-          {/* PACKAGE LIST */}
+          {!isEditMode && (
+            <div className="p-6 border-b border-white/10">
+              <label className="text-xs text-gray-400">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                min={todayISO}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="mt-2 w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2 text-white"
+              />
+              {activeSub && (
+                <div className="mt-3 text-xs text-amber-400">
+                  Client already has active subscription.
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-6 space-y-3">
             {packages.map((pkg) => {
-              const isSamePackage = isEditMode && pkg.id === oldPackageId
+              const isSame =
+                isEditMode &&
+                pkg.id === editSubscription?.packageId
 
               return (
                 <div
                   key={pkg.id}
                   onClick={() =>
-                    !processing && !isSamePackage && setSelected(pkg)
+                    !processing &&
+                    !isSame &&
+                    setSelected(pkg)
                   }
                   className={`p-4 rounded-xl border cursor-pointer transition
                     ${
@@ -69,14 +101,13 @@ export default function ActivatePackageDrawer({
                         ? "border-indigo-500 bg-indigo-600/10"
                         : "border-white/10 bg-white/5 hover:bg-white/10"
                     }
-                    ${isSamePackage ? "opacity-40 pointer-events-none" : ""}
+                    ${isSame ? "opacity-40 pointer-events-none" : ""}
                   `}
                 >
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-white">
                       {pkg.name}
                     </span>
-
                     <span className="text-sm text-indigo-400">
                       {pkg.price.toLocaleString("ru-RU")} сум
                     </span>
@@ -86,7 +117,6 @@ export default function ActivatePackageDrawer({
             })}
           </div>
 
-          {/* FOOTER */}
           {selected && (
             <div className="border-t border-white/10 p-6 mt-auto">
               <div className="flex justify-between text-gray-400 text-sm mb-4">
@@ -108,7 +138,6 @@ export default function ActivatePackageDrawer({
         </div>
       </div>
 
-      {/* PAYMENT MODAL */}
       {showPayment && selected && (
         <PaymentModal
           total={selected.price}
@@ -116,90 +145,99 @@ export default function ActivatePackageDrawer({
             name: `${client?.firstName} ${client?.lastName}`,
           }}
           checkNumber={checkId}
-          onClose={() => !processing && setShowPayment(false)}
-          onConfirm={async (paymentData) => {
+          requireComment={isEditMode}
+          onClose={() =>
+            !processing && setShowPayment(false)
+          }
+          onConfirm={async ({ amounts, comment }) => {
             if (processing) return
             setProcessing(true)
 
             try {
-              const { amounts, comment } = paymentData
-
-              if (isEditMode && !comment?.trim()) {
-                alert("Comment is required for edit")
-                return
-              }
-
-              /* ================= EDIT LOGIC ================= */
+              let newSubscriptionId = null
 
               if (isEditMode) {
-                const oldPrice =
-                  Number(editSubscription.packageSnapshot?.price) || 0
 
-                // 1️⃣ Replace subscription
-                replaceSubscription(editSubscription.id, comment)
+                if (!comment?.trim()) {
+                  alert("Comment is required for replace")
+                  return
+                }
 
-                // 2️⃣ Refund old service (minus)
-                if (oldPrice > 0) {
-                  addFinanceTx({
-                    type: "service_refund",
+                if (editSubscription.sessionsCount > 0) {
+                  alert("Cannot replace after session started")
+                  return
+                }
+
+                // 1️⃣ Eski paymentlarni topamiz
+                const oldPayments = transactions.filter(
+                  (t) =>
+                    t.source === "subscription" &&
+                    t.sourceId === editSubscription.id &&
+                    t.type === "payment"
+                )
+
+                // 2️⃣ Eski sotib olingan summani minus bilan yozamiz
+                oldPayments.forEach((p) => {
+                  addTransaction({
+                    type: "payment",
                     category: "package",
                     clientId: client.id,
-                    amount: -oldPrice,
+                    amount: -Math.abs(Number(p.amount)),
+                    paymentMethod: p.paymentMethod,
                     meta: {
-                      replacedSubscriptionId: editSubscription.id,
-                      oldPackageName:
-                        editSubscription.packageSnapshot?.name,
-                    },
-                    comment: `Package edited refund`,
+                      replaceRefund: true
+                    }
                   })
-                }
+                })
+
+                // 3️⃣ Yangi subscription yaratamiz
+                newSubscriptionId = replaceSubscription(
+                  editSubscription.id,
+                  client,
+                  selected,
+                  comment
+                )
+
+              } else {
+
+                newSubscriptionId = sellSubscription(
+                  client,
+                  selected,
+                  startDate
+                )
               }
 
-              /* ================= NEW SERVICE ================= */
-
-              addFinanceTx({
+              // 4️⃣ Yangi service yoziladi
+              addTransaction({
                 type: "service",
                 category: "package",
                 clientId: client.id,
                 amount: Number(selected.price),
-                meta: {
-                  packageId: selected.id,
-                  packageName: selected.name,
-                  editedFrom:
-                    editSubscription?.packageSnapshot?.name || null,
-                },
+                source: "subscription",
+                sourceId: newSubscriptionId,
               })
 
-              /* ================= PAYMENT ================= */
-
-          Object.entries(amounts).forEach(([method, amount]) => {
-  if (Number(amount) > 0) {
-    addFinanceTx({
-      type: "payment",
-      category: "package",
-      clientId: client.id,
-      amount: Number(amount),
-      paymentMethod: method,
-      comment,
-
-      // 🔥 ENG MUHIM
-      meta: {
-        packageId: selected.id,
-        packageName: selected.name,
-        subscriptionId: editSubscription?.id || null,
-        editedFrom:
-          editSubscription?.packageSnapshot?.name || null,
-      },
-    })
-  }
-})
-              /* ================= ACTIVATE NEW ================= */
-
-              activateSubscription(client, selected)
+              // 5️⃣ Yangi payment yoziladi
+              Object.entries(amounts).forEach(
+                ([method, amount]) => {
+                  if (Number(amount) > 0) {
+                    addTransaction({
+                      type: "payment",
+                      category: "package",
+                      clientId: client.id,
+                      amount: Number(amount),
+                      paymentMethod: method,
+                      source: "subscription",
+                      sourceId: newSubscriptionId,
+                    })
+                  }
+                }
+              )
 
               setShowPayment(false)
               setSelected(null)
               onClose()
+
             } finally {
               setProcessing(false)
             }

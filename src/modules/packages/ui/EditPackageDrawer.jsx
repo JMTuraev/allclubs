@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { XMarkIcon } from "@heroicons/react/24/outline"
 import { usePackages } from "../domain/PackagesContext"
 
 export default function EditPackageDrawer({
   pkg,
   onClose,
-  onSuccess,   // 🔥 parentga signal
+  onSuccess,
 }) {
   const { updatePackage } = usePackages()
 
@@ -14,8 +14,6 @@ export default function EditPackageDrawer({
     price: 0,
     duration: 30,
     bonusDays: 0,
-    isUnlimited: true,
-    visitLimit: null,
     gradient: "from-indigo-500 to-indigo-700",
   })
 
@@ -28,12 +26,19 @@ export default function EditPackageDrawer({
         price: pkg.price || 0,
         duration: pkg.duration || 30,
         bonusDays: pkg.bonusDays || 0,
-        isUnlimited: pkg.isUnlimited ?? true,
-        visitLimit: pkg.visitLimit,
-        gradient: pkg.gradient || "from-indigo-500 to-indigo-700",
+        gradient:
+          pkg.gradient || "from-indigo-500 to-indigo-700",
       })
     }
   }, [pkg])
+
+  // 🔒 TOTAL DAYS
+  const totalDays = useMemo(() => {
+    return (
+      Number(form.duration || 0) +
+      Number(form.bonusDays || 0)
+    )
+  }, [form.duration, form.bonusDays])
 
   const validate = () => {
     const newErrors = {}
@@ -42,12 +47,12 @@ export default function EditPackageDrawer({
       newErrors.name = "Package name required"
     }
 
-    if (form.price <= 0) {
+    if (Number(form.price) <= 0) {
       newErrors.price = "Price must be greater than 0"
     }
 
-    if (!form.isUnlimited && (!form.visitLimit || form.visitLimit <= 0)) {
-      newErrors.visitLimit = "Visit limit required"
+    if (Number(form.duration) <= 0) {
+      newErrors.duration = "Duration must be greater than 0"
     }
 
     setErrors(newErrors)
@@ -59,13 +64,16 @@ export default function EditPackageDrawer({
 
     updatePackage(pkg.id, {
       ...form,
-      visitLimit: form.isUnlimited ? null : Number(form.visitLimit),
       price: Number(form.price),
       duration: Number(form.duration),
       bonusDays: Number(form.bonusDays),
+
+      // 🔒 Anti-abuse model
+      isUnlimited: false,
+      visitLimit: totalDays,
     })
 
-    if (onSuccess) onSuccess()  // 🔥 parentga aytamiz
+    if (onSuccess) onSuccess()
     onClose()
   }
 
@@ -88,7 +96,7 @@ export default function EditPackageDrawer({
             <label className="text-xs text-gray-400">Name</label>
             <input
               value={form.name}
-              onChange={e =>
+              onChange={(e) =>
                 setForm({ ...form, name: e.target.value })
               }
               className="mt-1 w-full bg-gray-800 rounded px-3 py-2 text-white"
@@ -105,7 +113,7 @@ export default function EditPackageDrawer({
             <input
               type="number"
               value={form.price}
-              onChange={e =>
+              onChange={(e) =>
                 setForm({ ...form, price: e.target.value })
               }
               className="mt-1 w-full bg-gray-800 rounded px-3 py-2 text-white"
@@ -124,53 +132,42 @@ export default function EditPackageDrawer({
             <input
               type="number"
               value={form.duration}
-              onChange={e =>
+              onChange={(e) =>
                 setForm({ ...form, duration: e.target.value })
+              }
+              className="mt-1 w-full bg-gray-800 rounded px-3 py-2 text-white"
+            />
+            {errors.duration && (
+              <div className="text-red-400 text-xs mt-1">
+                {errors.duration}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400">
+              Bonus Days
+            </label>
+            <input
+              type="number"
+              value={form.bonusDays}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  bonusDays: e.target.value,
+                })
               }
               className="mt-1 w-full bg-gray-800 rounded px-3 py-2 text-white"
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={form.isUnlimited}
-              onChange={e =>
-                setForm({
-                  ...form,
-                  isUnlimited: e.target.checked,
-                  visitLimit: e.target.checked ? null : 0,
-                })
-              }
-            />
-            <span className="text-sm text-white">
-              Unlimited visits
-            </span>
-          </div>
-
-          {!form.isUnlimited && (
-            <div>
-              <label className="text-xs text-gray-400">
-                Visit Limit
-              </label>
-              <input
-                type="number"
-                value={form.visitLimit || ""}
-                onChange={e =>
-                  setForm({
-                    ...form,
-                    visitLimit: e.target.value,
-                  })
-                }
-                className="mt-1 w-full bg-gray-800 rounded px-3 py-2 text-white"
-              />
-              {errors.visitLimit && (
-                <div className="text-red-400 text-xs mt-1">
-                  {errors.visitLimit}
-                </div>
-              )}
+          {/* 🔒 AUTO VISIT INFO */}
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-xs text-gray-400">
+            Maximum visits automatically equals total days.
+            <div className="mt-1 text-white font-medium">
+              {totalDays} visits
             </div>
-          )}
+          </div>
 
         </div>
 
