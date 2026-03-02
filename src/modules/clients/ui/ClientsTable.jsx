@@ -16,13 +16,12 @@ export default function ClientsTable({ clients }) {
 
   const {
     getActiveSubscriptionByClient,
+    getScheduledSubscriptionsByClient,
   } = useSubscriptionsContext()
 
   const [keyClient, setKeyClient] = useState(null)
   const [activateClient, setActivateClient] = useState(null)
   const [closeData, setCloseData] = useState(null)
-
-  // 🔥 race-condition oldini olish uchun
   const [refreshKey, setRefreshKey] = useState(0)
 
   return (
@@ -47,47 +46,69 @@ export default function ClientsTable({ clients }) {
               const activeSession =
                 getActiveSessionByClient(client.id)
 
-              const subscription =
+              const activeSub =
                 getActiveSubscriptionByClient(client.id)
 
-              const hasActivePackage =
-                subscription &&
-                subscription.status === "active"
+              const scheduledSubs =
+                getScheduledSubscriptionsByClient(client.id)
+
+              const hasActivePackage = !!activeSub
+              const hasScheduledPackage =
+                scheduledSubs.length > 0
 
               let visitPercent = 0
               let visitsUsed = 0
               let visitsTotal = 0
 
+              /* ================= PROGRESS FIX ================= */
+
               if (hasActivePackage) {
                 const now = new Date()
-                const startDate = new Date(subscription.startDate)
-                const expireDate = new Date(subscription.endDate)
+                const startDate = new Date(activeSub.startDate)
+                const expireDate = new Date(activeSub.endDate)
 
                 const totalDays =
-                  (expireDate - startDate) /
-                  (1000 * 60 * 60 * 24)
+                  Math.max(
+                    1,
+                    Math.floor(
+                      (expireDate - startDate) /
+                        (1000 * 60 * 60 * 24)
+                    ) + 1
+                  )
+
+                const diffMs = now - startDate
 
                 const usedDays =
-                  (now - startDate) /
-                  (1000 * 60 * 60 * 24)
+                  diffMs <= 0
+                    ? 0
+                    : Math.floor(
+                        diffMs /
+                          (1000 * 60 * 60 * 24)
+                      )
 
                 const daysPercent =
                   totalDays > 0
-                    ? Math.min((usedDays / totalDays) * 100, 100)
+                    ? Math.min(
+                        (usedDays / totalDays) * 100,
+                        100
+                      )
                     : 0
 
-                if (subscription.visitLimit === null) {
+                if (activeSub.visitLimit === null) {
                   visitPercent = daysPercent
                 } else {
-                  visitsTotal = subscription.visitLimit
+                  visitsTotal =
+                    activeSub.visitLimit
+
                   visitsUsed =
-                    subscription.visitLimit -
-                    subscription.remainingVisits
+                    activeSub.visitLimit -
+                    activeSub.remainingVisits
 
                   const visitUsagePercent =
                     visitsTotal > 0
                       ? Math.min(
-                          (visitsUsed / visitsTotal) * 100,
+                          (visitsUsed / visitsTotal) *
+                            100,
                           100
                         )
                       : 0
@@ -101,8 +122,8 @@ export default function ClientsTable({ clients }) {
 
               const canCheckIn =
                 hasActivePackage &&
-                (subscription.visitLimit === null ||
-                  subscription.remainingVisits > 0)
+                (activeSub.visitLimit === null ||
+                  activeSub.remainingVisits > 0)
 
               return (
                 <tr
@@ -117,7 +138,9 @@ export default function ClientsTable({ clients }) {
                     <div
                       className="flex items-center gap-4 cursor-pointer"
                       onClick={() =>
-                        navigate(`/app/clients/${client.id}`)
+                        navigate(
+                          `/app/clients/${client.id}`
+                        )
                       }
                     >
                       <img
@@ -130,7 +153,8 @@ export default function ClientsTable({ clients }) {
                           ID: {client.id}
                         </div>
                         <div className="text-white font-semibold text-base">
-                          {client.firstName} {client.lastName}
+                          {client.firstName}{" "}
+                          {client.lastName}
                         </div>
                         <div className="text-gray-400 text-sm">
                           {client.phone}
@@ -143,17 +167,25 @@ export default function ClientsTable({ clients }) {
                     {hasActivePackage ? (
                       <>
                         <div className="text-white">
-                          {subscription.packageSnapshot.name}
+                          {
+                            activeSub.packageSnapshot
+                              .name
+                          }
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 text-xs">
-                          {subscription.visitLimit !== null && (
+                          {activeSub.visitLimit !==
+                            null && (
                             <span className="text-gray-400">
-                              {visitsUsed} / {visitsTotal}
+                              {visitsUsed} /{" "}
+                              {visitsTotal}
                             </span>
                           )}
                           <span className="text-indigo-400 ml-2">
-                            {Math.round(visitPercent)}%
+                            {Math.round(
+                              visitPercent
+                            )}
+                            %
                           </span>
                         </div>
 
@@ -166,6 +198,21 @@ export default function ClientsTable({ clients }) {
                           />
                         </div>
                       </>
+                    ) : hasScheduledPackage ? (
+                      <div className="text-yellow-400 text-xs space-y-1">
+                        <div>
+                          {
+                            scheduledSubs[0]
+                              .packageSnapshot.name
+                          }
+                        </div>
+                        <div>
+                          Starts{" "}
+                          {new Date(
+                            scheduledSubs[0].startDate
+                          ).toLocaleDateString()}
+                        </div>
+                      </div>
                     ) : (
                       <button
                         onClick={() =>
@@ -182,13 +229,17 @@ export default function ClientsTable({ clients }) {
                     {activeSession ? (
                       <div className="space-y-2">
                         <div className="text-emerald-400 text-sm">
-                          Locker: {activeSession.lockerCode}
+                          Locker:{" "}
+                          {
+                            activeSession.lockerCode
+                          }
                         </div>
 
                         <button
                           onClick={() =>
                             setCloseData({
-                              session: activeSession,
+                              session:
+                                activeSession,
                               client,
                             })
                           }
@@ -226,7 +277,9 @@ export default function ClientsTable({ clients }) {
                         View session
                       </button>
                     ) : (
-                      <span className="text-gray-500">—</span>
+                      <span className="text-gray-500">
+                        —
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -236,30 +289,29 @@ export default function ClientsTable({ clients }) {
         </table>
       </div>
 
-      {/* ACTIVATE DRAWER */}
       {activateClient && (
         <ActivatePackageDrawer
           client={activateClient}
           onClose={() => {
             setActivateClient(null)
-            setRefreshKey(prev => prev + 1) // 🔥 majburiy re-render
+            setRefreshKey(prev => prev + 1)
           }}
         />
       )}
 
-      {/* CHECK-IN */}
       {keyClient && (
         <KeypadModal
           mode="checkin"
-          onClose={() => setKeyClient(null)}
+          onClose={() =>
+            setKeyClient(null)
+          }
           onConfirm={(lockerCode) => {
             const sub =
               getActiveSubscriptionByClient(
                 keyClient.id
               )
 
-            if (!sub || sub.status !== "active")
-              return
+            if (!sub) return
 
             startSession({
               clientId: keyClient.id,
@@ -276,7 +328,6 @@ export default function ClientsTable({ clients }) {
         />
       )}
 
-      {/* CLOSE SESSION */}
       {closeData && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-[#111827] w-[400px] rounded-2xl p-6 space-y-5 border border-white/10">
@@ -285,13 +336,20 @@ export default function ClientsTable({ clients }) {
             </div>
 
             <div className="text-sm text-gray-400">
-              Client: {closeData.client.firstName}{" "}
-              {closeData.client.lastName}
+              Client:{" "}
+              {
+                closeData.client.firstName
+              }{" "}
+              {
+                closeData.client.lastName
+              }
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <button
-                onClick={() => setCloseData(null)}
+                onClick={() =>
+                  setCloseData(null)
+                }
                 className="px-4 py-2 bg-gray-700 rounded-lg"
               >
                 Cancel
@@ -299,7 +357,9 @@ export default function ClientsTable({ clients }) {
 
               <button
                 onClick={() => {
-                  endSession(closeData.session.id)
+                  endSession(
+                    closeData.session.id
+                  )
                   setCloseData(null)
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"

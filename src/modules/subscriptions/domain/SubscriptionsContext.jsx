@@ -21,6 +21,24 @@ const endOfDay = (date) => {
   return d
 }
 
+const hasDateOverlap = (clientId, newStart, newEnd, list) => {
+  return list.some(sub => {
+    if (String(sub.clientId) !== String(clientId))
+      return false
+
+    if (sub.status === "replaced" || sub.status === "cancelled")
+      return false
+
+    const existingStart = new Date(sub.startDate)
+    const existingEnd = new Date(sub.endDate)
+
+    return (
+      newStart <= existingEnd &&
+      newEnd >= existingStart
+    )
+  })
+}
+
 const calculateStatus = (sub) => {
   const now = new Date()
 
@@ -79,6 +97,17 @@ export function SubscriptionsProvider({ children }) {
     const rawEndDate = addDays(startDate, duration - 1)
     const endDate = endOfDay(rawEndDate)
 
+    if (
+      hasDateOverlap(
+        client.id,
+        startDate,
+        endDate,
+        subscriptions
+      )
+    ) {
+      throw new Error("Subscription dates overlap")
+    }
+
     const visitLimit =
       template.isUnlimited ? null : template.visitLimit ?? null
 
@@ -107,13 +136,68 @@ export function SubscriptionsProvider({ children }) {
       updatedAt: now.toISOString(),
     }
 
-    setSubscriptions((prev) => [...prev, newSub])
+    setSubscriptions(prev => [...prev, newSub])
 
-    // 🔥 MUHIM: id emas, to‘liq object qaytaramiz
     return newSub
   }
 
-  /* ================= SAFE REPLACE ================= */
+  /* ================= UPDATE START DATE (NEW) ================= */
+
+  const updateStartDate = (subscriptionId, newStartDateRaw) => {
+    const newStartDate = new Date(newStartDateRaw)
+
+    setSubscriptions(prev => {
+      const sub = prev.find(s => s.id === subscriptionId)
+      if (!sub) return prev
+
+      // 🔒 Session ochilgan bo‘lsa ruxsat yo‘q
+      if (sub.sessionsCount > 0) {
+        throw new Error(
+          "Cannot edit start date after session started"
+        )
+      }
+
+      const oldStart = new Date(sub.startDate)
+      const oldEnd = new Date(sub.endDate)
+
+      const duration =
+        Math.floor(
+          (oldEnd - oldStart) /
+          (1000 * 60 * 60 * 24)
+        ) + 1
+
+      const newEndDate = endOfDay(
+        addDays(newStartDate, duration - 1)
+      )
+
+      // 🔥 Overlap tekshiramiz (o‘zini hisobga olmaymiz)
+      if (
+        hasDateOverlap(
+          sub.clientId,
+          newStartDate,
+          newEndDate,
+          prev.filter(s => s.id !== subscriptionId)
+        )
+      ) {
+        throw new Error(
+          "New dates overlap another package"
+        )
+      }
+
+      return prev.map(s =>
+        s.id === subscriptionId
+          ? {
+              ...s,
+              startDate: newStartDate.toISOString(),
+              endDate: newEndDate.toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          : s
+      )
+    })
+  }
+
+  /* ================= REPLACE ================= */
 
   const replaceSubscription = (
     oldSubscriptionId,
@@ -130,15 +214,15 @@ export function SubscriptionsProvider({ children }) {
 
     let createdSub = null
 
-    setSubscriptions((prev) => {
+    setSubscriptions(prev => {
       const oldSub = prev.find(
-        (s) => s.id === oldSubscriptionId
+        s => s.id === oldSubscriptionId
       )
 
       if (!oldSub) return prev
       if (oldSub.sessionsCount > 0) return prev
 
-      const updated = prev.map((sub) =>
+      const updated = prev.map(sub =>
         sub.id === oldSubscriptionId
           ? {
               ...sub,
@@ -156,6 +240,17 @@ export function SubscriptionsProvider({ children }) {
 
       const rawEndDate = addDays(now, duration - 1)
       const endDate = endOfDay(rawEndDate)
+
+      if (
+        hasDateOverlap(
+          client.id,
+          now,
+          endDate,
+          updated
+        )
+      ) {
+        throw new Error("Subscription dates overlap")
+      }
 
       const visitLimit =
         template.isUnlimited ? null : template.visitLimit ?? null
@@ -194,8 +289,8 @@ export function SubscriptionsProvider({ children }) {
   /* ================= VISIT ================= */
 
   const decrementVisit = (subscriptionId) => {
-    setSubscriptions((prev) =>
-      prev.map((sub) => {
+    setSubscriptions(prev =>
+      prev.map(sub => {
         if (sub.id !== subscriptionId)
           return sub
 
@@ -232,8 +327,8 @@ export function SubscriptionsProvider({ children }) {
     subscriptionId,
     reason = ""
   ) => {
-    setSubscriptions((prev) =>
-      prev.map((sub) => {
+    setSubscriptions(prev =>
+      prev.map(sub => {
         if (sub.id !== subscriptionId)
           return sub
 
@@ -258,7 +353,7 @@ export function SubscriptionsProvider({ children }) {
 
   const subscriptionsWithStatus =
     useMemo(() => {
-      return subscriptions.map((sub) => ({
+      return subscriptions.map(sub => ({
         ...sub,
         status: calculateStatus(sub),
       }))
@@ -267,31 +362,31 @@ export function SubscriptionsProvider({ children }) {
   /* ================= SELECTORS ================= */
 
   const getActiveSubscriptionByClient =
-    (clientId) =>
+    clientId =>
       subscriptionsWithStatus.find(
-        (sub) =>
+        sub =>
           String(sub.clientId) === String(clientId) &&
           sub.status === "active"
       )
 
   const getScheduledSubscriptionsByClient =
-    (clientId) =>
+    clientId =>
       subscriptionsWithStatus.filter(
-        (sub) =>
+        sub =>
           String(sub.clientId) === String(clientId) &&
           sub.status === "scheduled"
       )
 
   const getSubscriptionsByClient =
-    (clientId) =>
+    clientId =>
       subscriptionsWithStatus.filter(
-        (sub) =>
+        sub =>
           String(sub.clientId) === String(clientId)
       )
 
-  const getSubscriptionById = (id) =>
+  const getSubscriptionById = id =>
     subscriptionsWithStatus.find(
-      (sub) => sub.id === id
+      sub => sub.id === id
     )
 
   return (
@@ -300,6 +395,7 @@ export function SubscriptionsProvider({ children }) {
         subscriptions: subscriptionsWithStatus,
         sellSubscription,
         replaceSubscription,
+        updateStartDate, // ✅ NEW METHOD
         decrementVisit,
         cancelSubscription,
         getActiveSubscriptionByClient,

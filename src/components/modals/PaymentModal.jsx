@@ -23,7 +23,8 @@ export default function PaymentModal({
     debt: 0,
   });
   const [comment, setComment] = useState("");
-  const [loading, setLoading] = useState(false); // 🔥 NEW
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null); // ✅ NEW
 
   /* ================= CALCULATIONS ================= */
 
@@ -47,6 +48,7 @@ export default function PaymentModal({
 
   const activate = (method) => {
     if (loading) return;
+    setError(null);
 
     setActiveMethod(method);
 
@@ -73,6 +75,7 @@ export default function PaymentModal({
 
   const updateAmount = (method, value) => {
     if (loading) return;
+    setError(null);
 
     const numeric = Number(value) || 0;
 
@@ -91,41 +94,13 @@ export default function PaymentModal({
     });
   };
 
-  /* ================= METHODS ================= */
-
-  const methods = [
-    {
-      key: "cash",
-      label: "Cash",
-      icon: <BanknotesIcon className="w-5 h-5" />,
-      gradient: "from-emerald-500 to-emerald-700"
-    },
-    {
-      key: "terminal",
-      label: "Terminal",
-      icon: <CreditCardIcon className="w-5 h-5" />,
-      gradient: "from-indigo-500 to-indigo-700"
-    },
-    {
-      key: "click",
-      label: "Click",
-      icon: <DevicePhoneMobileIcon className="w-5 h-5" />,
-      gradient: "from-cyan-500 to-cyan-700"
-    },
-    {
-      key: "debt",
-      label: "Debt",
-      icon: <ExclamationTriangleIcon className="w-5 h-5" />,
-      gradient: "from-red-500 to-red-700"
-    }
-  ];
-
   /* ================= CONFIRM ================= */
 
   const handleConfirm = async () => {
     if (!isValid || loading) return;
 
     setLoading(true);
+    setError(null);
 
     try {
       await onConfirm({
@@ -135,7 +110,12 @@ export default function PaymentModal({
         total: safeTotal
       });
 
-      onClose(); // 🔥 modal yopiladi faqat 1 marta
+      onClose();
+    } catch (err) {
+      // ✅ Error ushlaymiz va modal ichida ko‘rsatamiz
+      setError(
+        err?.message || "Something went wrong"
+      );
     } finally {
       setLoading(false);
     }
@@ -145,7 +125,6 @@ export default function PaymentModal({
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-[#111827] w-[460px] rounded-2xl p-6 space-y-5 shadow-2xl">
 
-        {/* HEADER */}
         <div>
           <div className="text-lg font-semibold">
             Payment
@@ -165,9 +144,41 @@ export default function PaymentModal({
           </span>
         </div>
 
+        {/* ✅ ERROR MESSAGE */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500 text-red-400 text-sm p-3 rounded-lg">
+            {error}
+          </div>
+        )}
+
         {/* METHODS */}
         <div className="space-y-3">
-          {methods.map((m) => (
+          {[
+            {
+              key: "cash",
+              label: "Cash",
+              icon: <BanknotesIcon className="w-5 h-5" />,
+              gradient: "from-emerald-500 to-emerald-700"
+            },
+            {
+              key: "terminal",
+              label: "Terminal",
+              icon: <CreditCardIcon className="w-5 h-5" />,
+              gradient: "from-indigo-500 to-indigo-700"
+            },
+            {
+              key: "click",
+              label: "Click",
+              icon: <DevicePhoneMobileIcon className="w-5 h-5" />,
+              gradient: "from-cyan-500 to-cyan-700"
+            },
+            {
+              key: "debt",
+              label: "Debt",
+              icon: <ExclamationTriangleIcon className="w-5 h-5" />,
+              gradient: "from-red-500 to-red-700"
+            }
+          ].map((m) => (
             <div key={m.key} className="flex items-center gap-3">
               <button
                 disabled={loading}
@@ -196,7 +207,6 @@ export default function PaymentModal({
           ))}
         </div>
 
-        {/* COMMENT */}
         <textarea
           placeholder={
             isDebtUsed
@@ -215,7 +225,6 @@ export default function PaymentModal({
           }`}
         />
 
-        {/* REMAINING */}
         <div className="text-sm">
           Remaining:{" "}
           <span
@@ -229,7 +238,6 @@ export default function PaymentModal({
           </span>
         </div>
 
-        {/* FOOTER */}
         <div className="flex justify-end gap-3 pt-3">
           <button
             onClick={onClose}
