@@ -16,16 +16,21 @@ export default function ClientsTable({ clients }) {
 
   const {
     getActiveSubscriptionByClient,
-    decrementVisit,
   } = useSubscriptionsContext()
 
   const [keyClient, setKeyClient] = useState(null)
   const [activateClient, setActivateClient] = useState(null)
   const [closeData, setCloseData] = useState(null)
 
+  // 🔥 race-condition oldini olish uchun
+  const [refreshKey, setRefreshKey] = useState(0)
+
   return (
     <>
-      <div className="bg-gray-900 border border-white/10 rounded-2xl">
+      <div
+        key={refreshKey}
+        className="bg-gray-900 border border-white/10 rounded-2xl"
+      >
         <table className="min-w-full divide-y divide-white/10 text-sm">
           <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase">
             <tr>
@@ -49,16 +54,12 @@ export default function ClientsTable({ clients }) {
                 subscription &&
                 subscription.status === "active"
 
-              /* ================= PROGRESS ================= */
-
               let visitPercent = 0
               let visitsUsed = 0
               let visitsTotal = 0
-              let visitsLeft = 0
 
               if (hasActivePackage) {
                 const now = new Date()
-
                 const startDate = new Date(subscription.startDate)
                 const expireDate = new Date(subscription.endDate)
 
@@ -76,15 +77,11 @@ export default function ClientsTable({ clients }) {
                     : 0
 
                 if (subscription.visitLimit === null) {
-                  // unlimited
                   visitPercent = daysPercent
                 } else {
                   visitsTotal = subscription.visitLimit
                   visitsUsed =
                     subscription.visitLimit -
-                    subscription.remainingVisits
-
-                  visitsLeft =
                     subscription.remainingVisits
 
                   const visitUsagePercent =
@@ -112,12 +109,10 @@ export default function ClientsTable({ clients }) {
                   key={client.id}
                   className="hover:bg-gray-800/40 transition"
                 >
-                  {/* № */}
                   <td className="px-6 py-6 text-gray-400">
                     {index + 1}
                   </td>
 
-                  {/* CLIENT */}
                   <td className="px-6 py-6">
                     <div
                       className="flex items-center gap-4 cursor-pointer"
@@ -144,7 +139,6 @@ export default function ClientsTable({ clients }) {
                     </div>
                   </td>
 
-                  {/* PACKAGE */}
                   <td className="px-6 py-6">
                     {hasActivePackage ? (
                       <>
@@ -184,7 +178,6 @@ export default function ClientsTable({ clients }) {
                     )}
                   </td>
 
-                  {/* LOCKER */}
                   <td className="px-6 py-6">
                     {activeSession ? (
                       <div className="space-y-2">
@@ -220,7 +213,6 @@ export default function ClientsTable({ clients }) {
                     )}
                   </td>
 
-                  {/* ACTIVITY */}
                   <td className="px-6 py-6 text-sm">
                     {activeSession ? (
                       <button
@@ -248,7 +240,10 @@ export default function ClientsTable({ clients }) {
       {activateClient && (
         <ActivatePackageDrawer
           client={activateClient}
-          onClose={() => setActivateClient(null)}
+          onClose={() => {
+            setActivateClient(null)
+            setRefreshKey(prev => prev + 1) // 🔥 majburiy re-render
+          }}
         />
       )}
 
@@ -275,10 +270,6 @@ export default function ClientsTable({ clients }) {
               staffName: "Admin",
               lockerCode,
             })
-
-            if (sub.visitLimit !== null) {
-              decrementVisit(sub.id)
-            }
 
             setKeyClient(null)
           }}

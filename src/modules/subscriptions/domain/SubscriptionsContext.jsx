@@ -15,6 +15,12 @@ const addDays = (date, days) => {
   return result
 }
 
+const endOfDay = (date) => {
+  const d = new Date(date)
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+
 const calculateStatus = (sub) => {
   const now = new Date()
 
@@ -25,15 +31,7 @@ const calculateStatus = (sub) => {
   const end = new Date(sub.endDate)
 
   if (now < start) return "scheduled"
-
-  if (
-    now > end ||
-    (sub.visitLimit !== null &&
-      sub.remainingVisits !== null &&
-      sub.remainingVisits <= 0)
-  ) {
-    return "expired"
-  }
+  if (now > end) return "expired"
 
   return "active"
 }
@@ -55,63 +53,64 @@ export function SubscriptionsProvider({ children }) {
     const now = new Date()
     const newId = crypto.randomUUID()
 
-    setSubscriptions((prev) => {
+    const activeSub = subscriptions.find(
+      (s) =>
+        String(s.clientId) === String(client.id) &&
+        calculateStatus(s) === "active"
+    )
 
-      const activeSub = prev.find(
-        (s) =>
-          String(s.clientId) === String(client.id) &&
-          calculateStatus(s) === "active"
+    let startDate
+
+    if (activeSub) {
+      startDate = addDays(
+        new Date(activeSub.endDate),
+        1
       )
+    } else {
+      startDate = customStartDate
+        ? new Date(customStartDate)
+        : now
+    }
 
-      let startDate
+    const duration =
+      Number(template.duration || 0) +
+      Number(template.bonusDays || 0)
 
-      if (activeSub) {
-        startDate = addDays(
-          new Date(activeSub.endDate),
-          1
-        )
-      } else {
-        startDate = customStartDate
-          ? new Date(customStartDate)
-          : now
-      }
+    const rawEndDate = addDays(startDate, duration - 1)
+    const endDate = endOfDay(rawEndDate)
 
-      const duration =
-        Number(template.duration || 0) +
-        Number(template.bonusDays || 0)
+    const visitLimit =
+      template.isUnlimited ? null : template.visitLimit ?? null
 
-      const endDate = addDays(startDate, duration)
+    const newSub = {
+      id: newId,
+      clientId: String(client.id),
+      clientName: `${client.firstName} ${client.lastName}`,
+      clientPhone: client.phone ?? "",
+      packageId: template.id,
+      packageSnapshot: { ...template },
 
-      const visitLimit =
-        template.isUnlimited ? null : template.visitLimit ?? null
+      soldAt: now.toISOString(),
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
 
-      const newSub = {
-        id: newId,
-        clientId: String(client.id),
-        clientName: `${client.firstName} ${client.lastName}`,
-        clientPhone: client.phone ?? "",
-        packageId: template.id,
-        packageSnapshot: { ...template },
-        soldAt: now.toISOString(),
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        visitLimit,
-        remainingVisits: visitLimit,
-        sessionsCount: 0,
-        freezeUsedDays: 0,
-        status:
-          startDate > now
-            ? "scheduled"
-            : "active",
-        replaceComment: null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      }
+      visitLimit,
+      remainingVisits: visitLimit,
 
-      return [...prev, newSub]
-    })
+      sessionsCount: 0,
+      freezeUsedDays: 0,
 
-    return newId
+      status: "active",
+      replaceComment: null,
+
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    }
+
+    setSubscriptions((prev) => [...prev, newSub])
+
+    // 🔥 MUHIM: id emas, to‘liq object qaytaramiz
+    return newSub
   }
 
   /* ================= SAFE REPLACE ================= */
@@ -129,17 +128,15 @@ export function SubscriptionsProvider({ children }) {
     const now = new Date()
     const newId = crypto.randomUUID()
 
+    let createdSub = null
+
     setSubscriptions((prev) => {
       const oldSub = prev.find(
         (s) => s.id === oldSubscriptionId
       )
 
       if (!oldSub) return prev
-
-      if (oldSub.sessionsCount > 0) {
-        alert("Cannot replace subscription after session started")
-        return prev
-      }
+      if (oldSub.sessionsCount > 0) return prev
 
       const updated = prev.map((sub) =>
         sub.id === oldSubscriptionId
@@ -157,35 +154,41 @@ export function SubscriptionsProvider({ children }) {
         Number(template.duration || 0) +
         Number(template.bonusDays || 0)
 
-      const endDate = addDays(now, duration)
+      const rawEndDate = addDays(now, duration - 1)
+      const endDate = endOfDay(rawEndDate)
 
       const visitLimit =
         template.isUnlimited ? null : template.visitLimit ?? null
 
-      const newSub = {
+      createdSub = {
         id: newId,
         clientId: String(client.id),
         clientName: `${client.firstName} ${client.lastName}`,
         clientPhone: client.phone ?? "",
         packageId: template.id,
         packageSnapshot: { ...template },
+
         soldAt: now.toISOString(),
         startDate: now.toISOString(),
         endDate: endDate.toISOString(),
+
         visitLimit,
         remainingVisits: visitLimit,
+
         sessionsCount: 0,
         freezeUsedDays: 0,
+
         status: "active",
         replaceComment: null,
+
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       }
 
-      return [...updated, newSub]
+      return [...updated, createdSub]
     })
 
-    return newId
+    return createdSub
   }
 
   /* ================= VISIT ================= */
@@ -309,8 +312,6 @@ export function SubscriptionsProvider({ children }) {
     </SubscriptionsContext.Provider>
   )
 }
-
-/* ================= HOOK ================= */
 
 export function useSubscriptionsContext() {
   const context =

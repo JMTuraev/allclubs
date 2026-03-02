@@ -1,19 +1,15 @@
-import { createContext, useContext, useReducer, useMemo } from "react"
+import { createContext, useContext, useReducer } from "react"
 import { v4 as uuid } from "uuid"
 import { useAudit } from "../../audit/AuditContext"
 import { useSubscriptionsContext } from "../../subscriptions/domain/SubscriptionsContext"
 
 const SessionsContext = createContext()
 
-/* ================= HELPERS ================= */
-
 function calculateDuration(startedAt) {
   const start = new Date(startedAt)
   const end = new Date()
   return Math.floor((end - start) / 60000)
 }
-
-/* ================= REDUCER ================= */
 
 function reducer(state, action) {
   switch (action.type) {
@@ -71,8 +67,6 @@ function reducer(state, action) {
   }
 }
 
-/* ================= PROVIDER ================= */
-
 export function SessionsProvider({ children }) {
   const [sessions, dispatch] = useReducer(reducer, [])
   const { addEvent } = useAudit()
@@ -103,15 +97,15 @@ export function SessionsProvider({ children }) {
       throw new Error("Client already has active session")
     }
 
-    // 2️⃣ Active subscription check
+    // 2️⃣ Active subscription
     const subscription =
       getActiveSubscriptionByClient(clientId)
 
-    if (!subscription || subscription.status !== "active") {
+    if (!subscription) {
       throw new Error("No active subscription")
     }
 
-    // 3️⃣ Visit check (only if NOT unlimited)
+    // 3️⃣ Visit check (limited only)
     if (
       subscription.visitLimit !== null &&
       subscription.remainingVisits <= 0
@@ -119,7 +113,7 @@ export function SessionsProvider({ children }) {
       throw new Error("No remaining visits")
     }
 
-    // 4️⃣ Decrement visit (only limited packages)
+    // 4️⃣ Decrement visit (limited only)
     if (subscription.visitLimit !== null) {
       decrementVisit(subscription.id)
     }
@@ -186,7 +180,6 @@ export function SessionsProvider({ children }) {
     if (!session) return
     if (session.status === "voided") return
 
-    // 🔁 Return visit only if limited
     if (session.subscriptionId) {
       incrementVisit(session.subscriptionId)
     }
@@ -208,8 +201,6 @@ export function SessionsProvider({ children }) {
       staffName
     })
   }
-
-  /* ================= OTHER ================= */
 
   const markSessionsPaid = (ids) => {
     dispatch({ type: "MARK_PAID", payload: ids })
@@ -234,14 +225,15 @@ export function SessionsProvider({ children }) {
     })
   }
 
-  const value = useMemo(() => ({
+  // 🔥 useMemo olib tashlandi — stale closure yo‘q
+  const value = {
     sessions,
     startSession,
     endSession,
     voidSession,
     addTransaction,
     markSessionsPaid
-  }), [sessions])
+  }
 
   return (
     <SessionsContext.Provider value={value}>
@@ -249,8 +241,6 @@ export function SessionsProvider({ children }) {
     </SessionsContext.Provider>
   )
 }
-
-/* ================= HOOK ================= */
 
 export function useSessionsContext() {
   const ctx = useContext(SessionsContext)
