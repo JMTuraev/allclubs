@@ -8,7 +8,88 @@ import {
 const SubscriptionsContext = createContext(null)
 
 export function SubscriptionsProvider({ children }) {
-  const [subscriptions, setSubscriptions] = useState([])
+  /* ================= MOCK DATA (TEST) ================= */
+
+  const [subscriptions, setSubscriptions] = useState([
+    {
+      id: "sub_1",
+      clientId: 125,
+      clientName: "Jafarali Turaev",
+      clientPhone: "+998 91 555 44 33",
+
+      packageSnapshot: {
+        id: "pkg_1",
+        name: "10 посещений",
+        duration: 30,
+        isUnlimited: false,
+        visitsTotal: 10,
+        price: 500000,
+      },
+
+      visitsUsed: 3,
+      visitsTotal: 10,
+
+      startedAt: "2026-03-01T00:00:00.000Z",
+      expiresAt: "2026-03-31T00:00:00.000Z",
+      createdAt: "2026-03-01T00:00:00.000Z",
+
+      status: "active",
+      replaceComment: null,
+      correctionComment: null,
+    },
+    {
+      id: "sub_2",
+      clientId: 125,
+      clientName: "Jafarali Turaev",
+      clientPhone: "+998 91 555 44 33",
+
+      packageSnapshot: {
+        id: "pkg_2",
+        name: "1 Month Unlimited",
+        duration: 30,
+        isUnlimited: true,
+        visitsTotal: null,
+        price: 700000,
+      },
+
+      visitsUsed: 0,
+      visitsTotal: null,
+
+      startedAt: "2026-01-01T00:00:00.000Z",
+      expiresAt: "2026-01-31T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+
+      status: "expired",
+      replaceComment: null,
+      correctionComment: null,
+    },
+    {
+      id: "sub_3",
+      clientId: 125,
+      clientName: "Jafarali Turaev",
+      clientPhone: "+998 91 555 44 33",
+
+      packageSnapshot: {
+        id: "pkg_3",
+        name: "3 Months Pro",
+        duration: 90,
+        isUnlimited: false,
+        visitsTotal: 90,
+        price: 1500000,
+      },
+
+      visitsUsed: 65,
+      visitsTotal: 90,
+
+      startedAt: "2025-09-01T00:00:00.000Z",
+      expiresAt: "2025-12-01T00:00:00.000Z",
+      createdAt: "2025-09-01T00:00:00.000Z",
+
+      status: "expired",
+      replaceComment: null,
+      correctionComment: null,
+    },
+  ])
 
   /* ================= ACTIVATE ================= */
 
@@ -53,7 +134,7 @@ export function SubscriptionsProvider({ children }) {
       expiresAt: expiresAt.toISOString(),
       createdAt: startedAt.toISOString(),
 
-      status: "active", // active | expired | replaced
+      status: "active",
       replaceComment: null,
       correctionComment: null,
     }
@@ -72,7 +153,8 @@ export function SubscriptionsProvider({ children }) {
               ...sub,
               status: "replaced",
               expiresAt: new Date().toISOString(),
-              replaceComment: comment || "Replaced manually",
+              replaceComment:
+                comment || "Replaced manually",
             }
       )
     )
@@ -91,7 +173,8 @@ export function SubscriptionsProvider({ children }) {
                 ...sub.packageSnapshot,
                 ...updates,
               },
-              correctionComment: comment || "Corrected manually",
+              correctionComment:
+                comment || "Corrected manually",
             }
       )
     )
@@ -131,7 +214,7 @@ export function SubscriptionsProvider({ children }) {
 
       return {
         ...sub,
-        status: isExpired ? "expired" : sub.status,
+        status: isExpired ? "expired" : "active",
       }
     })
   }, [subscriptions])
@@ -180,10 +263,12 @@ export function SubscriptionsProvider({ children }) {
 
 export function useSubscriptionsContext() {
   const context = useContext(SubscriptionsContext)
+
   if (!context) {
     throw new Error(
       "useSubscriptionsContext must be used inside SubscriptionsProvider"
     )
   }
+
   return context
 }

@@ -1,5 +1,9 @@
 import { useParams } from "react-router-dom"
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline"
 
 import { useClientsContext } from "../../modules/clients/domain/ClientsContext"
 import { useSubscriptionsContext } from "../../modules/subscriptions/domain/SubscriptionsContext"
@@ -17,13 +21,12 @@ export default function ClientProfilePage() {
   const { id } = useParams()
 
   const { getClientById } = useClientsContext()
-  const {
-    getActiveSubscriptionByClient,
-    getSubscriptionsByClient,
-  } = useSubscriptionsContext()
+  const { getSubscriptionsByClient } =
+    useSubscriptionsContext()
 
   const { sessions } = useSessionsContext()
-  const { transactions, getClientBalance } = useTransactions()
+  const { transactions, getClientBalance } =
+    useTransactions()
 
   const client = getClientById(id)
 
@@ -37,82 +40,132 @@ export default function ClientProfilePage() {
 
   /* ================= SUBSCRIPTIONS ================= */
 
-  const activeSubscription =
-    getActiveSubscriptionByClient(id)
-
   const allSubscriptions =
     getSubscriptionsByClient(id)
 
-  const subscriptionHistory = allSubscriptions.filter(
-    (s) => s.status !== "active"
-  )
+  const sortedSubscriptions = useMemo(() => {
+    return [...allSubscriptions].sort(
+      (a, b) =>
+        new Date(b.startedAt) -
+        new Date(a.startedAt)
+    )
+  }, [allSubscriptions])
+
+  const [currentIndex, setCurrentIndex] =
+    useState(null)
+
+  // Default faqat bir marta set qilinadi
+  useEffect(() => {
+    if (
+      sortedSubscriptions.length &&
+      currentIndex === null
+    ) {
+      setCurrentIndex(0) // eng yangi
+    }
+  }, [sortedSubscriptions, currentIndex])
+
+  const selectedSubscription =
+    currentIndex !== null
+      ? sortedSubscriptions[currentIndex]
+      : null
 
   /* ================= SESSIONS ================= */
 
   const clientSessions = useMemo(
     () =>
       sessions.filter(
-        (s) => String(s.clientId) === String(id)
+        (s) =>
+          String(s.clientId) ===
+          String(id)
       ),
     [sessions, id]
   )
 
-  /* ================= TRANSACTIONS ================= */
+  const filteredSessions =
+    useMemo(() => {
+      if (!selectedSubscription)
+        return []
 
-  const clientTransactions = useMemo(
+      const start = new Date(
+        selectedSubscription.startedAt
+      )
+      const end = new Date(
+        selectedSubscription.expiresAt
+      )
+
+      return clientSessions.filter(
+        (s) => {
+          const d = new Date(
+            s.createdAt
+          )
+          return (
+            d >= start && d <= end
+          )
+        }
+      )
+    }, [
+      clientSessions,
+      selectedSubscription,
+    ])
+
+  /* ================= PAYMENTS ================= */
+
+  const clientPayments = useMemo(
     () =>
       transactions.filter(
         (t) =>
-          String(t.clientId) === String(id) &&
-          t.status === "active"
+          String(t.clientId) ===
+            String(id) &&
+          t.status === "active" &&
+          t.type === "payment"
       ),
     [transactions, id]
   )
 
-  const clientPayments = useMemo(
-    () =>
-      clientTransactions.filter(
-        (t) => t.type === "payment"
-      ),
-    [clientTransactions]
-  )
+  const revenueData = useMemo(() => {
+    const days = []
+    const today = new Date()
 
-const revenueData = useMemo(() => {
-  const days = []
-  const today = new Date()
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(today.getDate() - i)
 
-  // Oxirgi 30 kunni yaratamiz
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(today.getDate() - i)
+      const key =
+        d.toISOString().split("T")[0]
 
-    const key = d.toISOString().split("T")[0]
+      const totalForDay =
+        clientPayments
+          .filter((t) => {
+            const tDate =
+              new Date(
+                t.createdAt
+              )
+                .toISOString()
+                .split("T")[0]
+            return tDate === key
+          })
+          .reduce(
+            (sum, t) =>
+              sum +
+              Number(t.amount || 0),
+            0
+          )
 
-    // Shu kunda paymentlar yig‘indisi
-    const totalForDay = clientPayments
-      .filter((t) => {
-        const tDate = new Date(t.createdAt)
-          .toISOString()
-          .split("T")[0]
-        return tDate === key
+      days.push({
+        date: new Date(d),
+        value: totalForDay,
       })
-      .reduce(
-        (sum, t) => sum + Number(t.amount || 0),
-        0
-      )
+    }
 
-    days.push({
-      date: new Date(d),
-      value: totalForDay,
-    })
-  }
+    return days
+  }, [clientPayments])
 
-  return days
-}, [clientPayments])
   const totalPaid = useMemo(
     () =>
       clientPayments.reduce(
-        (sum, t) => sum + Number(t.amount || 0),
+        (sum, t) =>
+          sum +
+          Number(t.amount || 0),
         0
       ),
     [clientPayments]
@@ -120,60 +173,63 @@ const revenueData = useMemo(() => {
 
   const balance = getClientBalance(id)
 
+  /* ================= RENDER ================= */
+
   return (
     <ClientProfileLayout
       header={
         <ClientHeader
           client={client}
-          subscription={activeSubscription}
+          subscription={
+            selectedSubscription
+          }
           balance={balance}
           totalPaid={totalPaid}
         />
       }
       left={
         <>
-          {/* ACTIVE SUBSCRIPTION */}
-          <ClientSubscriptionCard
-            subscription={activeSubscription}
-          />
+          <div className="relative">
 
-          {/* SUBSCRIPTION HISTORY */}
-          {subscriptionHistory.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <div className="text-sm text-gray-400">
-                Subscription History
-              </div>
-
-              {subscriptionHistory.map((sub) => (
-                <div
-                  key={sub.id}
-                  className="bg-gray-800 p-4 rounded-xl text-sm"
+            {currentIndex !== null &&
+              currentIndex <
+                sortedSubscriptions.length -
+                  1 && (
+                <button
+                  onClick={() =>
+                    setCurrentIndex(
+                      (prev) => prev + 1
+                    )
+                  }
+                  className="absolute -left-3 top-1/2 -translate-y-1/2 z-10 bg-[#111827] p-2 rounded-full border border-white/10 hover:bg-indigo-600 transition"
                 >
-                  <div className="font-medium text-white">
-                    {sub.packageSnapshot.name}
-                  </div>
+                  <ChevronLeftIcon className="w-4 h-4" />
+                </button>
+              )}
 
-                  <div className="text-gray-400 text-xs mt-1">
-                    Status: {sub.status}
-                  </div>
+            {currentIndex !== null &&
+              currentIndex > 0 && (
+                <button
+                  onClick={() =>
+                    setCurrentIndex(
+                      (prev) => prev - 1
+                    )
+                  }
+                  className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-[#111827] p-2 rounded-full border border-white/10 hover:bg-indigo-600 transition"
+                >
+                  <ChevronRightIcon className="w-4 h-4" />
+                </button>
+              )}
 
-                  {sub.replaceComment && (
-                    <div className="text-red-400 text-xs mt-1">
-                      Replace: {sub.replaceComment}
-                    </div>
-                  )}
+            {selectedSubscription && (
+              <ClientSubscriptionCard
+                subscription={
+                  selectedSubscription
+                }
+              />
+            )}
+          </div>
 
-                  {sub.correctionComment && (
-                    <div className="text-yellow-400 text-xs mt-1">
-                      Correction: {sub.correctionComment}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* REUSABLE REVENUE CHART */}
           <RevenueChart
             title="Client Payments"
             data={revenueData}
@@ -184,7 +240,10 @@ const revenueData = useMemo(() => {
       right={
         <>
           <ClientCalendar
-            sessions={clientSessions}
+            sessions={filteredSessions}
+            subscription={
+              selectedSubscription
+            }
           />
           <ClientPersonalInfo
             client={client}
