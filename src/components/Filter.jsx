@@ -1,5 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import { CalendarDaysIcon } from "@heroicons/react/24/outline"
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/20/solid"
 
 export default function Filter({ onChange }) {
   const today = new Date()
@@ -10,6 +14,11 @@ export default function Filter({ onChange }) {
     from: today,
     to: today,
   })
+
+  // 🔥 dynamic month control
+  const [baseMonth, setBaseMonth] = useState(
+    new Date(today.getFullYear(), today.getMonth(), 1)
+  )
 
   const ref = useRef(null)
 
@@ -32,63 +41,73 @@ export default function Filter({ onChange }) {
   /* ========================= */
 
   const emitChange = (type, from = null, to = null) => {
-    onChange?.({
-      type,
-      from,
-      to,
-    })
+    onChange?.({ type, from, to })
   }
 
   /* ========================= */
-  /* QUICK FILTER HANDLER     */
+  /* MONTH NAVIGATION         */
+  /* ========================= */
+
+  const goPrevMonth = () => {
+    setBaseMonth(
+      new Date(baseMonth.getFullYear(), baseMonth.getMonth() - 1, 1)
+    )
+  }
+
+  const goNextMonth = () => {
+    setBaseMonth(
+      new Date(baseMonth.getFullYear(), baseMonth.getMonth() + 1, 1)
+    )
+  }
+
+  const months = [
+    baseMonth,
+    new Date(
+      baseMonth.getFullYear(),
+      baseMonth.getMonth() + 1,
+      1
+    ),
+  ]
+
+  /* ========================= */
+  /* QUICK FILTERS (same)     */
   /* ========================= */
 
   const applyQuickFilter = (value) => {
     const now = new Date()
-
     setActiveFilter(value)
     setOpen(false)
 
-    if (value === "today") {
-      emitChange("today", now, now)
-      return
-    }
+    if (value === "today") return emitChange("today", now, now)
 
     if (value === "yesterday") {
       const y = new Date()
       y.setDate(y.getDate() - 1)
-      emitChange("yesterday", y, y)
-      return
+      return emitChange("yesterday", y, y)
     }
 
     if (value === "7") {
       const from = new Date()
       from.setDate(from.getDate() - 6)
-      emitChange("7", from, now)
-      return
+      return emitChange("7", from, now)
     }
 
     if (value === "30") {
       const from = new Date()
       from.setDate(from.getDate() - 29)
-      emitChange("30", from, now)
-      return
+      return emitChange("30", from, now)
     }
 
     if (value === "month") {
       const first = new Date(now.getFullYear(), now.getMonth(), 1)
-      emitChange("month", first, now)
-      return
+      return emitChange("month", first, now)
     }
 
-    if (value === "all") {
-      emitChange("all", null, null)
-      return
-    }
+    if (value === "all") return emitChange("all", null, null)
   }
 
   /* ========================= */
-  /* CUSTOM RANGE HANDLER     */
+  /* RANGE SELECT             */
   /* ========================= */
 
   const handleSelect = (date) => {
@@ -106,11 +125,27 @@ export default function Filter({ onChange }) {
       }
 
       setRange({ from: newFrom, to: newTo })
-
       setOpen(false)
       emitChange("custom", newFrom, newTo)
     }
   }
+
+  /* ========================= */
+  /* CALENDAR HELPERS         */
+  /* ========================= */
+
+  const getDays = (year, month) => {
+    const last = new Date(year, month + 1, 0).getDate()
+    return Array.from({ length: last }, (_, i) =>
+      new Date(year, month, i + 1)
+    )
+  }
+
+  const isSame = (a, b) =>
+    a && b && a.toDateString() === b.toDateString()
+
+  const inRange = (d) =>
+    range.from && range.to && d >= range.from && d <= range.to
 
   /* ========================= */
   /* LABEL                    */
@@ -132,40 +167,6 @@ export default function Filter({ onChange }) {
   }, [activeFilter, range])
 
   /* ========================= */
-  /* CALENDAR HELPERS         */
-  /* ========================= */
-
-  const currentMonth = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    1
-  )
-
-  const months = [
-    currentMonth,
-    new Date(
-      currentMonth.getFullYear(),
-      currentMonth.getMonth() + 1,
-      1
-    ),
-  ]
-
-  const getDays = (year, month) => {
-    const last = new Date(year, month + 1, 0).getDate()
-    return Array.from({ length: last }, (_, i) =>
-      new Date(year, month, i + 1)
-    )
-  }
-
-  const isSame = (a, b) =>
-    a && b && a.toDateString() === b.toDateString()
-
-  const inRange = (d) => {
-    if (!range.from || !range.to) return false
-    return d >= range.from && d <= range.to
-  }
-
-  /* ========================= */
   /* UI                       */
   /* ========================= */
 
@@ -180,17 +181,40 @@ export default function Filter({ onChange }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-14 z-50 bg-[#0f172a] border border-white/10 rounded-2xl p-6 w-[850px] shadow-2xl flex gap-8">
+        <div className="absolute right-0 top-14 z-50 bg-[#0f172a] border border-white/10 rounded-2xl p-6 w-[900px] shadow-2xl flex gap-8">
 
           {/* CALENDAR */}
           <div className="flex gap-12">
+
             {months.map((m, idx) => (
               <div key={idx} className="w-72">
-                <div className="text-white font-semibold mb-6 text-lg">
-                  {m.toLocaleString("ru-RU", {
-                    month: "long",
-                    year: "numeric",
-                  })}
+                
+                {/* 🔥 HEADER WITH NAV */}
+                <div className="flex items-center justify-between mb-6">
+                  {idx === 0 && (
+                    <button
+                      onClick={goPrevMonth}
+                      className="p-1 rounded hover:bg-white/10 transition"
+                    >
+                      <ChevronLeftIcon className="w-5 h-5 text-white" />
+                    </button>
+                  )}
+
+                  <div className="text-white font-semibold text-lg">
+                    {m.toLocaleString("ru-RU", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </div>
+
+                  {idx === 1 && (
+                    <button
+                      onClick={goNextMonth}
+                      className="p-1 rounded hover:bg-white/10 transition"
+                    >
+                      <ChevronRightIcon className="w-5 h-5 text-white" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-7 gap-y-3 text-gray-300 text-sm">
@@ -207,11 +231,7 @@ export default function Filter({ onChange }) {
                         key={d.toISOString()}
                         onClick={() => handleSelect(d)}
                         className={`h-9 flex items-center justify-center
-                          ${
-                            between
-                              ? "bg-indigo-500/20"
-                              : "hover:bg-gray-800"
-                          }
+                          ${between ? "bg-indigo-500/20" : "hover:bg-gray-800"}
                         `}
                       >
                         <span
@@ -231,9 +251,10 @@ export default function Filter({ onChange }) {
                 </div>
               </div>
             ))}
+
           </div>
 
-          {/* QUICK FILTERS */}
+          {/* QUICK FILTERS (unchanged) */}
           <div className="w-56 border-l border-white/10 pl-6 text-gray-400 text-sm space-y-4">
             {[
               ["Сегодня", "today"],

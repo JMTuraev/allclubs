@@ -10,10 +10,14 @@ export function useSessionStats() {
     let trainer = 0
 
     sessions.forEach(s => {
-      s.transactions.forEach(tx => {
-        if (tx.type === "bar") bar += tx.amount
-        if (tx.type === "package") packageRevenue += tx.amount
-        if (tx.type === "trainer") trainer += tx.amount
+      const txList = Array.isArray(s.transactions)
+        ? s.transactions
+        : []
+
+      txList.forEach(tx => {
+        if (tx.type === "bar") bar += tx.amount || 0
+        if (tx.type === "package") packageRevenue += tx.amount || 0
+        if (tx.type === "trainer") trainer += tx.amount || 0
       })
     })
 

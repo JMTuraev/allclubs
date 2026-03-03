@@ -3,20 +3,37 @@ import { useMemo } from "react"
 export default function TransactionsTable({
   transactions,
   clients,
+  clientIdFilter,
+  onClearClientFilter
 }) {
 
   /* ============================= */
-  /* LEDGER FILTER (cancelledni olib tashlaymiz) */
+  /* FILTER LOGIC                 */
   /* ============================= */
 
   const visibleTransactions = useMemo(() => {
     return transactions
       .filter((t) => t.status !== "cancelled")
       .filter((t) => t.type !== "service")
-  }, [transactions])
+      .filter((t) => {
+        if (!clientIdFilter) return true
+        return String(t.clientId) === String(clientIdFilter)
+      })
+  }, [transactions, clientIdFilter])
 
   /* ============================= */
-  /* TOTAL (REAL LEDGER MODEL)    */
+  /* CLIENT INFO FOR BADGE        */
+  /* ============================= */
+
+  const filteredClient = useMemo(() => {
+    if (!clientIdFilter) return null
+    return clients.find(
+      (c) => String(c.id) === String(clientIdFilter)
+    )
+  }, [clients, clientIdFilter])
+
+  /* ============================= */
+  /* TOTAL                        */
   /* ============================= */
 
   const totalAmount = useMemo(() => {
@@ -29,11 +46,32 @@ export default function TransactionsTable({
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden">
 
+      {/* HEADER */}
       <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
-        <h2 className="text-lg font-semibold">
-          Transactions
-        </h2>
 
+        <div className="flex items-center gap-3">
+
+          <h2 className="text-lg font-semibold">
+            Transactions
+          </h2>
+
+          {/* CLIENT FILTER BADGE */}
+          {filteredClient && (
+            <div className="flex items-center gap-2 bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full text-xs font-medium">
+              {filteredClient.firstName} {filteredClient.lastName}
+
+              <button
+                onClick={onClearClientFilter}
+                className="ml-1 text-indigo-400 hover:text-white transition"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+        </div>
+
+        {/* TOTAL */}
         <div className="text-sm">
           <span className="text-gray-400 mr-2">
             Total:
@@ -49,8 +87,10 @@ export default function TransactionsTable({
             {totalAmount.toLocaleString()} сум
           </span>
         </div>
+
       </div>
 
+      {/* TABLE */}
       <div className="p-6">
         <table className="w-full text-sm">
           <thead className="text-gray-400">
@@ -72,7 +112,6 @@ export default function TransactionsTable({
               const amount = Number(t.amount || 0)
               const isNegative = amount < 0
 
-              /* 🔥 FIRESTORE TIMESTAMP FIX */
               const date =
                 t.createdAt?.toDate
                   ? t.createdAt.toDate()
@@ -83,7 +122,7 @@ export default function TransactionsTable({
               return (
                 <tr
                   key={`${t.id}-${i}`}
-                  className="border-t border-white/5"
+                  className="border-t border-white/5 hover:bg-white/5 transition"
                 >
                   <td className="p-3">
                     {date

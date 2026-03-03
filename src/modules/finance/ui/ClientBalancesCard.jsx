@@ -1,7 +1,21 @@
+import { useNavigate } from "react-router-dom"
+
 export default function ClientBalancesCard({
   balances,
   onClientClick
 }) {
+  const navigate = useNavigate()
+
+  const handleClientClick = (clientId) => {
+    // agar parent handler mavjud bo‘lsa — o‘sha ishlaydi
+    if (typeof onClientClick === "function") {
+      onClientClick(clientId)
+      return
+    }
+
+    // aks holda default finance page filter
+navigate(`/app/finance?tab=transactions&clientId=${clientId}`)  }
+
   if (!balances || balances.length === 0) {
     return (
       <Card title="Client Overview">
@@ -46,7 +60,7 @@ export default function ClientBalancesCard({
                   {c.client ? (
                     <button
                       onClick={() =>
-                        onClientClick?.(c.clientId)
+                        handleClientClick(c.clientId)
                       }
                       className="text-indigo-400 hover:underline font-semibold"
                     >

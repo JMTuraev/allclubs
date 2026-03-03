@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
 
 export function useFinanceFilters(transactions) {
@@ -6,11 +6,11 @@ export function useFinanceFilters(transactions) {
 
   const from = searchParams.get("from")
   const to = searchParams.get("to")
-  const clientParam = searchParams.get("client")
+  const clientParam = searchParams.get("clientId")
   const activeTab = searchParams.get("tab") || "overview"
 
   /* ========================= */
-  /* 📅 DATE FILTER (RANGE SAFE) */
+  /* 📅 DATE FILTER (SAFE)     */
   /* ========================= */
 
   const dateFilteredTransactions = useMemo(() => {
@@ -23,7 +23,10 @@ export function useFinanceFilters(transactions) {
     return transactions.filter((t) => {
       if (!t?.createdAt) return false
 
-      const txDate = new Date(t.createdAt)
+      const txDate =
+        typeof t.createdAt?.toDate === "function"
+          ? t.createdAt.toDate()
+          : new Date(t.createdAt)
 
       if (start && txDate < start) return false
       if (end && txDate > end) return false
@@ -34,7 +37,7 @@ export function useFinanceFilters(transactions) {
   }, [transactions, from, to])
 
   /* ========================= */
-  /* 👤 CLIENT FILTER         */
+  /* 👤 CLIENT FILTER          */
   /* ========================= */
 
   const finalTransactions = useMemo(() => {
@@ -48,27 +51,62 @@ export function useFinanceFilters(transactions) {
   }, [dateFilteredTransactions, clientParam])
 
   /* ========================= */
-  /* 🔧 HANDLERS (SAFE)       */
+  /* 🔧 SAFE PARAM UPDATE      */
   /* ========================= */
 
-  const changeTab = (tab) => {
-    const params = new URLSearchParams(searchParams)
-    params.set("tab", tab)
-    setSearchParams(params)
-  }
+  const updateParams = useCallback(
+    (updater) => {
+      const current = new URLSearchParams(searchParams)
+      const next = new URLSearchParams(searchParams)
 
-  const setClientFilter = (clientId) => {
-    const params = new URLSearchParams(searchParams)
-    params.set("tab", "transactions")
-    params.set("client", clientId)
-    setSearchParams(params)
-  }
+      updater(next)
 
-  const clearClientFilter = () => {
-    const params = new URLSearchParams(searchParams)
-    params.delete("client")
-    setSearchParams(params)
-  }
+      if (current.toString() !== next.toString()) {
+        setSearchParams(next)
+      }
+    },
+    [searchParams, setSearchParams]
+  )
+
+  /* ========================= */
+  /* TAB CHANGE                */
+  /* ========================= */
+
+  const changeTab = useCallback(
+    (tab) => {
+      updateParams((params) => {
+        params.set("tab", tab)
+      })
+    },
+    [updateParams]
+  )
+
+  /* ========================= */
+  /* SET CLIENT FILTER         */
+  /* ========================= */
+
+  const setClientFilter = useCallback(
+    (clientId) => {
+      updateParams((params) => {
+        params.set("tab", "transactions")
+        params.set("clientId", clientId)
+      })
+    },
+    [updateParams]
+  )
+
+  /* ========================= */
+  /* CLEAR CLIENT FILTER       */
+  /* ========================= */
+
+  const clearClientFilter = useCallback(
+    () => {
+      updateParams((params) => {
+        params.delete("clientId")
+      })
+    },
+    [updateParams]
+  )
 
   return {
     activeTab,
