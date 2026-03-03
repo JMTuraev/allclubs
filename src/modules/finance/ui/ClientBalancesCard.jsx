@@ -26,20 +26,27 @@ export default function ClientBalancesCard({
 
         <tbody>
           {balances.map((c) => {
-            const totalRevenue = Number(c.totalRevenue || 0)
-            const debt = Number(c.debt || 0)
+            const totalRevenue = Number(c?.totalRevenue ?? 0)
+            const debt = Number(c?.debt ?? 0)
+
+            const revenueColor =
+              totalRevenue >= 0
+                ? "text-emerald-400"
+                : "text-red-400"
+
+            const safeDebt = Math.max(0, debt)
 
             return (
               <tr
                 key={c.clientId}
-                className="border-t border-white/5 hover:bg-white/5"
+                className="border-t border-white/5 hover:bg-white/5 transition"
               >
                 {/* CLIENT */}
                 <td className="p-3">
                   {c.client ? (
                     <button
                       onClick={() =>
-                        onClientClick(c.clientId)
+                        onClientClick?.(c.clientId)
                       }
                       className="text-indigo-400 hover:underline font-semibold"
                     >
@@ -47,18 +54,22 @@ export default function ClientBalancesCard({
                       {c.client.lastName}
                     </button>
                   ) : (
-                    "Unknown"
+                    <span className="text-gray-500">
+                      Unknown
+                    </span>
                   )}
                 </td>
 
                 {/* TOTAL REVENUE */}
-                <td className="p-3 text-right font-semibold text-emerald-400">
-                  {totalRevenue.toLocaleString()} сум
+                <td
+                  className={`p-3 text-right font-semibold ${revenueColor}`}
+                >
+                  {formatCurrency(totalRevenue)}
                 </td>
 
                 {/* DEBT */}
                 <td className="p-3 text-right font-semibold text-yellow-400">
-                  {debt.toLocaleString()} сум
+                  {formatCurrency(safeDebt)}
                 </td>
 
                 {/* LAST ACTIVITY */}
@@ -75,14 +86,27 @@ export default function ClientBalancesCard({
 }
 
 /* ============================= */
+/* CURRENCY FORMATTER            */
+/* ============================= */
+
+function formatCurrency(amount) {
+  return `${Number(amount).toLocaleString()} сум`
+}
+
+/* ============================= */
 /* RELATIVE DATE FORMATTER       */
 /* ============================= */
 
-function formatRelativeDate(dateString) {
-  if (!dateString) return "-"
+function formatRelativeDate(value) {
+  if (!value) return "-"
 
   const today = new Date()
-  const date = new Date(dateString)
+  const date =
+    typeof value?.toDate === "function"
+      ? value.toDate()
+      : new Date(value)
+
+  if (isNaN(date.getTime())) return "-"
 
   today.setHours(0, 0, 0, 0)
   date.setHours(0, 0, 0, 0)
@@ -98,6 +122,10 @@ function formatRelativeDate(dateString) {
 
   return "-"
 }
+
+/* ============================= */
+/* CARD WRAPPER                  */
+/* ============================= */
 
 function Card({ title, children }) {
   return (

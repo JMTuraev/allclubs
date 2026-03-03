@@ -8,12 +8,12 @@ export function useClientBalances(transactions, clients) {
     transactions.forEach((t) => {
 
       if (!t?.clientId) return
-      if (t.status && t.status !== "active") return
-      if (t.type !== "payment") return
+
+      // 🔥 STATUS FILTER OLIB TASHLANDI
+      // 🔥 TYPE FILTER OLIB TASHLANDI
 
       const id = String(t.clientId)
 
-      // amount toza number qilish
       const rawAmount = String(t.amount ?? 0).replace(/\s/g, "")
       const amount = Number(rawAmount)
 
@@ -29,7 +29,7 @@ export function useClientBalances(transactions, clients) {
       }
 
       /* ============================= */
-      /* 💰 TOTAL REVENUE              */
+      /* 💰 TOTAL REVENUE (NET LEDGER) */
       /* ============================= */
 
       map[id].totalRevenue += amount
@@ -59,21 +59,20 @@ export function useClientBalances(transactions, clients) {
       /* ============================= */
 
       if (t.createdAt) {
-        const txDate = new Date(t.createdAt)
+        const txDate =
+          typeof t.createdAt.toDate === "function"
+            ? t.createdAt.toDate()
+            : new Date(t.createdAt)
 
         if (
           !map[id].lastActivityDate ||
           txDate > new Date(map[id].lastActivityDate)
         ) {
-          map[id].lastActivityDate = t.createdAt
+          map[id].lastActivityDate = txDate
         }
       }
 
     })
-
-    /* ============================= */
-    /* 📦 RETURN STRUCTURE            */
-    /* ============================= */
 
     return Object.entries(map).map(([clientId, data]) => {
 

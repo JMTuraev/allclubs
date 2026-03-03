@@ -2,8 +2,6 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import {
   collection,
   addDoc,
-  updateDoc,
-  doc,
   serverTimestamp,
   onSnapshot,
   query,
@@ -33,6 +31,7 @@ export function TransactionProvider({ children }) {
         id: docSnap.id,
         ...docSnap.data(),
       }))
+
       setTransactions(list)
       setLoading(false)
     })
@@ -43,68 +42,52 @@ export function TransactionProvider({ children }) {
   /* ================= REPLACE (LEDGER SAFE) ================= */
 
   const replacePayment = async (oldTx, amounts) => {
+    const txRef = collection(db, "gyms", gymId, "transactions")
 
-    // 1️⃣ Eski transactionni replaced qilamiz
-    const oldRef = doc(db, "gyms", gymId, "transactions", oldTx.id)
-
-    await updateDoc(oldRef, {
-      status: "replaced",
-      updatedAt: serverTimestamp(),
-    })
-
-    // 2️⃣ MUHIM: minus reversal yozamiz
-    await addDoc(collection(db, "gyms", gymId, "transactions"), {
-      type: "payment",
+    // Reverse
+    await addDoc(txRef, {
+      type: "payment_reverse",
       clientId: String(oldTx.clientId),
       paymentMethod: oldTx.paymentMethod,
-      amount: -Math.abs(Number(oldTx.amount)), // 🔥 HAR DOIM MINUS
-      status: "active",
+      amount: -Math.abs(Number(oldTx.amount)),
       meta: {
-        replaceRefund: true,
         originalTxId: oldTx.id,
       },
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     })
 
-    // 3️⃣ Yangi paymentlar
+    // New entries
     const entries = Object.entries(amounts).filter(
       ([_, amount]) => Number(amount) > 0
     )
 
     for (const [method, amount] of entries) {
-      await addDoc(collection(db, "gyms", gymId, "transactions"), {
+      await addDoc(txRef, {
         type: "payment",
         clientId: String(oldTx.clientId),
         paymentMethod: method,
         amount: Number(amount),
-        status: "active",
         meta: {
           replacedOriginal: oldTx.id,
         },
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       })
     }
   }
 
-  const activeTransactions = useMemo(
-    () => transactions.filter((t) => t.status !== "cancelled"),
-    [transactions]
-  )
-
-  const value = useMemo(
-    () => ({
-      transactions,
-      activeTransactions,
-      loading,
-      replacePayment,
-    }),
-    [transactions, activeTransactions, loading]
-  )
+  const activeTransactions = useMemo(() => {
+    return transactions
+  }, [transactions])
 
   return (
-    <TransactionContext.Provider value={value}>
+    <TransactionContext.Provider
+      value={{
+        transactions,
+        activeTransactions,
+        loading,
+        replacePayment,
+      }}
+    >
       {children}
     </TransactionContext.Provider>
   )

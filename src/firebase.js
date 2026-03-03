@@ -74,6 +74,11 @@ export const updateSubscriptionStartDateFn = httpsCallable(
   "updateSubscriptionStartDate"
 );
 
+export const replaceSubscriptionFn = httpsCallable(
+  functions,
+  "replaceSubscription"
+);
+
 export const openDayFn = httpsCallable(
   functions,
   "openDay"
