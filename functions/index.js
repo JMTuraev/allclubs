@@ -61,11 +61,11 @@ exports.updateSubscription = onCall(async (request) => {
 
   const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
   const subRef = db.doc(`gyms/${gymId}/subscriptions/${subscriptionId}`);
-  const daysRef = db.collection(`gyms/${gymId}/days`);
+  const transactionsRef = db.collection(`gyms/${gymId}/transactions`);
 
   return db.runTransaction(async (tx) => {
 
-    /* ================= USER CHECK ================= */
+    /* ========= USER CHECK ========= */
 
     const userSnap = await tx.get(userRef);
     if (!userSnap.exists) {
@@ -77,7 +77,7 @@ exports.updateSubscription = onCall(async (request) => {
       throw new HttpsError("permission-denied", "Invalid role");
     }
 
-    /* ================= SUB CHECK ================= */
+    /* ========= SUB CHECK ========= */
 
     const subSnap = await tx.get(subRef);
     if (!subSnap.exists) {
@@ -86,7 +86,6 @@ exports.updateSubscription = onCall(async (request) => {
 
     const sub = subSnap.data();
 
-    // Staff cannot edit if session started
     if (role === "staff" && (sub.sessionsCount || 0) > 0) {
       throw new HttpsError(
         "failed-precondition",
@@ -94,7 +93,7 @@ exports.updateSubscription = onCall(async (request) => {
       );
     }
 
-    /* ================= DATE VALIDATION ================= */
+    /* ========= DATE VALIDATION ========= */
 
     if (safeUpdates.startDate && safeUpdates.endDate) {
       const start = new Date(safeUpdates.startDate);
@@ -108,50 +107,40 @@ exports.updateSubscription = onCall(async (request) => {
       }
     }
 
-    /* ================= PAYMENT METHOD UPDATE ================= */
+    /* ========= PAYMENT METHOD CHANGE (LEDGER SAFE) ========= */
 
     if (
       safeUpdates.paymentMethod &&
       safeUpdates.paymentMethod !== sub.paymentMethod
     ) {
-
-      // 🔎 Find active day atomically
-      const openDayQuery = daysRef
-        .where("status", "==", "open")
-        .limit(1);
-
-      const openDaySnap = await tx.get(openDayQuery);
-
-      if (openDaySnap.empty) {
-        throw new HttpsError(
-          "failed-precondition",
-          "No active day open"
-        );
-      }
-
-      const dayDoc = openDaySnap.docs[0];
-      const dayRef = dayDoc.ref;
-      const dayData = dayDoc.data();
-
-      const oldMethod = sub.paymentMethod;
-      const newMethod = safeUpdates.paymentMethod;
       const amount = Number(sub.price || 0);
 
-      const currentTotals = dayData.totals?.paymentMethods || {};
+      // 1️⃣ Reverse old transaction
+      tx.create(transactionsRef.doc(), {
+        gymId,
+        clientId: sub.clientId,
+        subscriptionId,
+        amount: -amount,
+        method: sub.paymentMethod,
+        type: "method_change_reverse",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: uid
+      });
 
-      const updatedTotals = {
-        ...currentTotals,
-        [oldMethod]: (currentTotals[oldMethod] || 0) - amount,
-        [newMethod]: (currentTotals[newMethod] || 0) + amount
-      };
-
-      tx.update(dayRef, {
-        "totals.paymentMethods": updatedTotals,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      // 2️⃣ Create new transaction with new method
+      tx.create(transactionsRef.doc(), {
+        gymId,
+        clientId: sub.clientId,
+        subscriptionId,
+        amount: amount,
+        method: safeUpdates.paymentMethod,
+        type: "method_change_repost",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: uid
       });
     }
 
-    /* ================= FINAL UPDATE ================= */
+    /* ========= FINAL SUB UPDATE ========= */
 
     tx.update(subRef, {
       ...safeUpdates,
@@ -161,7 +150,6 @@ exports.updateSubscription = onCall(async (request) => {
     return { success: true };
   });
 });
-
 exports.openDay = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
@@ -858,4 +846,102 @@ exports.createClient = onCall(async (request) => {
     success: true,
     clientId: clientRef.id,
   };
+});
+
+  exports.replaceSubscription = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, oldSubscriptionId, newPlan } = request.data;
+  const uid = request.auth.uid;
+
+  if (!gymId || !oldSubscriptionId || !newPlan) {
+    throw new HttpsError("invalid-argument", "Missing parameters");
+  }
+
+  const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
+  const oldSubRef = db.doc(`gyms/${gymId}/subscriptions/${oldSubscriptionId}`);
+  const subsRef = db.collection(`gyms/${gymId}/subscriptions`);
+  const transactionsRef = db.collection(`gyms/${gymId}/transactions`);
+
+  return db.runTransaction(async (tx) => {
+
+    /* ========= USER CHECK ========= */
+
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists) {
+      throw new HttpsError("permission-denied", "User not found");
+    }
+
+    const role = userSnap.data().role;
+    if (!["owner", "staff"].includes(role)) {
+      throw new HttpsError("permission-denied", "Invalid role");
+    }
+
+    /* ========= OLD SUB CHECK ========= */
+
+    const oldSubSnap = await tx.get(oldSubRef);
+    if (!oldSubSnap.exists) {
+      throw new HttpsError("not-found", "Old subscription not found");
+    }
+
+    const oldSub = oldSubSnap.data();
+
+    if (oldSub.status !== "active") {
+      throw new HttpsError("failed-precondition", "Subscription not active");
+    }
+
+    const oldPrice = Number(oldSub.price || 0);
+    const newPrice = Number(newPlan.price || 0);
+
+    /* ========= 1️⃣ MARK OLD AS REPLACED ========= */
+
+    tx.update(oldSubRef, {
+      status: "replaced",
+      replacedAt: admin.firestore.FieldValue.serverTimestamp(),
+      replacedBy: uid
+    });
+
+    /* ========= 2️⃣ CREATE NEW SUB ========= */
+
+    const newSubRef = subsRef.doc();
+
+    tx.create(newSubRef, {
+      ...newPlan,
+      clientId: oldSub.clientId,
+      status: "active",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: uid,
+      replacedFrom: oldSubscriptionId
+    });
+
+    /* ========= 3️⃣ LEDGER ENTRIES ========= */
+
+    // Reverse old amount
+    tx.create(transactionsRef.doc(), {
+      gymId,
+      clientId: oldSub.clientId,
+      subscriptionId: oldSubscriptionId,
+      amount: -oldPrice,
+      method: oldSub.paymentMethod,
+      type: "package_reverse",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: uid
+    });
+
+    // New sale
+    tx.create(transactionsRef.doc(), {
+      gymId,
+      clientId: oldSub.clientId,
+      subscriptionId: newSubRef.id,
+      amount: newPrice,
+      method: newPlan.paymentMethod,
+      type: "package_sale",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: uid
+    });
+
+    return { success: true };
+  });
 });
