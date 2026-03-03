@@ -1,125 +1,106 @@
-import { createContext, useContext, useState, useMemo } from "react"
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  onSnapshot,
+  query,
+  orderBy,
+} from "firebase/firestore"
+
+import { db } from "../../firebase"
 
 const TransactionContext = createContext()
 
 export function TransactionProvider({ children }) {
   const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  /* ================= ADD ================= */
+  const gymId = "sportzal_demo"
 
-  const addTransaction = (transaction) => {
-    if (!transaction?.clientId) {
-      console.warn("Transaction blocked: missing clientId")
-      return
-    }
+  /* ================= REALTIME ================= */
 
-    setTransactions((prev) => [
-      {
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-        status: "active",
-        ...transaction,
-        clientId: String(transaction.clientId),
-        amount: Number(transaction.amount) || 0,
-      },
-      ...prev,
-    ])
-  }
-
-  /* ================= UPDATE BY SOURCE ================= */
-
-  const updateTransactionBySource = (source, sourceId, updates) => {
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.source === source && t.sourceId === sourceId
-          ? { ...t, ...updates }
-          : t
-      )
+  useEffect(() => {
+    const q = query(
+      collection(db, "gyms", gymId, "transactions"),
+      orderBy("createdAt", "desc")
     )
-  }
 
-  /* ================= CANCEL BY SOURCE ================= */
-
-  const cancelTransactionBySource = (source, sourceId) => {
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.source === source && t.sourceId === sourceId
-          ? { ...t, status: "cancelled" }
-          : t
-      )
-    )
-  }
-
-  /* ================= REPLACE PAYMENT ================= */
-
-  const replacePayment = (oldTx, amounts) => {
-    setTransactions((prev) => {
-
-      const updated = prev.map((t) =>
-        t.id === oldTx.id
-          ? { ...t, status: "replaced" }
-          : t
-      )
-
-      const newTransactions = Object.entries(amounts)
-        .filter(([_, amount]) => Number(amount) > 0)
-        .map(([method, amount]) => ({
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          status: "active",
-          type: "payment",
-          clientId: String(oldTx.clientId),
-          paymentMethod: method,
-          amount: Number(amount),
-          source: oldTx.source || null,
-          sourceId: oldTx.sourceId || null,
-          meta: oldTx.meta || {}
-        }))
-
-      return [...updated, ...newTransactions]
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }))
+      setTransactions(list)
+      setLoading(false)
     })
-  }
 
-  /* ================= ACTIVE ONLY ================= */
+    return () => unsubscribe()
+  }, [gymId])
+
+  /* ================= REPLACE (LEDGER SAFE) ================= */
+
+  const replacePayment = async (oldTx, amounts) => {
+
+    // 1️⃣ Eski transactionni replaced qilamiz
+    const oldRef = doc(db, "gyms", gymId, "transactions", oldTx.id)
+
+    await updateDoc(oldRef, {
+      status: "replaced",
+      updatedAt: serverTimestamp(),
+    })
+
+    // 2️⃣ MUHIM: minus reversal yozamiz
+    await addDoc(collection(db, "gyms", gymId, "transactions"), {
+      type: "payment",
+      clientId: String(oldTx.clientId),
+      paymentMethod: oldTx.paymentMethod,
+      amount: -Math.abs(Number(oldTx.amount)), // 🔥 HAR DOIM MINUS
+      status: "active",
+      meta: {
+        replaceRefund: true,
+        originalTxId: oldTx.id,
+      },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+
+    // 3️⃣ Yangi paymentlar
+    const entries = Object.entries(amounts).filter(
+      ([_, amount]) => Number(amount) > 0
+    )
+
+    for (const [method, amount] of entries) {
+      await addDoc(collection(db, "gyms", gymId, "transactions"), {
+        type: "payment",
+        clientId: String(oldTx.clientId),
+        paymentMethod: method,
+        amount: Number(amount),
+        status: "active",
+        meta: {
+          replacedOriginal: oldTx.id,
+        },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    }
+  }
 
   const activeTransactions = useMemo(
-    () => transactions.filter((t) => t.status === "active"),
+    () => transactions.filter((t) => t.status !== "cancelled"),
     [transactions]
   )
-
-  /* ================= CLIENT BALANCE ================= */
-
-  const getClientBalance = (clientId) => {
-    if (!clientId) return 0
-
-    const clientTx = activeTransactions.filter(
-      (t) => String(t.clientId) === String(clientId)
-    )
-
-    const services = clientTx
-      .filter((t) => t.type === "service")
-      .reduce((sum, t) => sum + Number(t.amount), 0)
-
-    const payments = clientTx
-      .filter((t) => t.type === "payment")
-      .reduce((sum, t) => sum + Number(t.amount), 0)
-
-    return services - payments
-  }
-
-  /* ================= PROVIDER VALUE ================= */
 
   const value = useMemo(
     () => ({
       transactions,
       activeTransactions,
-      addTransaction,
-      updateTransactionBySource,
-      cancelTransactionBySource,
+      loading,
       replacePayment,
-      getClientBalance,
     }),
-    [transactions, activeTransactions]
+    [transactions, activeTransactions, loading]
   )
 
   return (

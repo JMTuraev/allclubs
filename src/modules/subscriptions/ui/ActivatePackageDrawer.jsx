@@ -2,8 +2,11 @@ import { useState, useMemo } from "react"
 import { XMarkIcon } from "@heroicons/react/24/outline"
 
 import { usePackages } from "../../packages/domain/PackagesContext"
-import { useTransactions } from "../../../context/transaction/TransactionContext"
-import { useSubscriptionsContext } from "../domain/SubscriptionsContext"
+
+import {
+  createSubscriptionFn,
+  updateSubscriptionStartDateFn,
+} from "../../../firebase"
 
 import PaymentModal from "../../../components/modals/PaymentModal"
 
@@ -14,13 +17,6 @@ export default function ActivatePackageDrawer({
   onClose,
 }) {
   const { packages } = usePackages()
-  const { transactions, addTransaction } = useTransactions()
-
-  const {
-    sellSubscription,
-    replaceSubscription,
-    updateStartDate,
-  } = useSubscriptionsContext()
 
   /* ================= MODE ================= */
 
@@ -43,6 +39,8 @@ export default function ActivatePackageDrawer({
   const [processing, setProcessing] = useState(false)
 
   const checkId = useMemo(() => `SUB-${Date.now()}`, [])
+
+  const gymId = "sportzal_demo" // keyin authdan olamiz
 
   /* ===================================================== */
   /* ====================== EDIT MODE ==================== */
@@ -76,9 +74,7 @@ export default function ActivatePackageDrawer({
               Current Start:
             </div>
             <div className="text-white text-sm">
-              {new Date(
-                editSubscription.startDate
-              ).toLocaleDateString()}
+              {new Date(editSubscription.startDate).toLocaleDateString()}
             </div>
 
             <div>
@@ -97,15 +93,22 @@ export default function ActivatePackageDrawer({
 
             <button
               disabled={processing}
-              onClick={() => {
+              onClick={async () => {
+                if (processing) return
+                setProcessing(true)
+
                 try {
-                  updateStartDate(
-                    editSubscription.id,
-                    startDate
-                  )
+                  await updateSubscriptionStartDateFn({
+                    gymId,
+                    subscriptionId: editSubscription.id,
+                    newStartDate: startDate,
+                  })
+
                   onClose()
                 } catch (err) {
-                  alert(err.message)
+                  alert(err.message || "Update failed")
+                } finally {
+                  setProcessing(false)
                 }
               }}
               className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white transition"
@@ -229,56 +232,22 @@ export default function ActivatePackageDrawer({
             setProcessing(true)
 
             try {
-              let newId
-
-              if (mode === "replace") {
-                if (!comment?.trim())
-                  throw new Error(
-                    "Comment required"
-                  )
-
-                newId = replaceSubscription(
-                  editSubscription.id,
-                  client,
-                  selected,
-                  comment
-                )
-              } else {
-                newId = sellSubscription(
-                  client,
-                  selected,
-                  startDate
-                )
-              }
-
-              addTransaction({
-                type: "service",
-                category: "package",
+              await createSubscriptionFn({
+                gymId,
                 clientId: client.id,
-                amount: Number(selected.price),
-                source: "subscription",
-                sourceId: newId,
+                packageId: selected.id,
+                startDate,
+                amounts,
+                comment: comment || null,
+                replaceId:
+                  mode === "replace"
+                    ? editSubscription.id
+                    : null,
               })
-
-              Object.entries(amounts).forEach(
-                ([method, amount]) => {
-                  if (Number(amount) > 0) {
-                    addTransaction({
-                      type: "payment",
-                      category: "package",
-                      clientId: client.id,
-                      amount: Number(amount),
-                      paymentMethod: method,
-                      source: "subscription",
-                      sourceId: newId,
-                    })
-                  }
-                }
-              )
 
               onClose()
             } catch (err) {
-              alert(err.message)
+              alert(err.message || "Operation failed")
             } finally {
               setProcessing(false)
             }

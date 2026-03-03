@@ -1,9 +1,10 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 
-import { useSessionsContext } from "../../sessions/domain/SessionsContext"
 import { useSessionSelectors } from "../../sessions/domain/useSessionSelectors"
 import { useSubscriptionsContext } from "../../subscriptions/domain/SubscriptionsContext"
+
+import { startSessionFn, endSessionFn } from "../../../firebase"
 
 import KeypadModal from "../../../components/modals/KeypadModal"
 import ActivatePackageDrawer from "../../subscriptions/ui/ActivatePackageDrawer"
@@ -11,7 +12,6 @@ import ActivatePackageDrawer from "../../subscriptions/ui/ActivatePackageDrawer"
 export default function ClientsTable({ clients }) {
   const navigate = useNavigate()
 
-  const { startSession, endSession } = useSessionsContext()
   const { getActiveSessionByClient } = useSessionSelectors()
 
   const {
@@ -22,14 +22,13 @@ export default function ClientsTable({ clients }) {
   const [keyClient, setKeyClient] = useState(null)
   const [activateClient, setActivateClient] = useState(null)
   const [closeData, setCloseData] = useState(null)
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [processing, setProcessing] = useState(false)
+
+  const GYM_ID = "sportzal_demo"
 
   return (
     <>
-      <div
-        key={refreshKey}
-        className="bg-gray-900 border border-white/10 rounded-2xl"
-      >
+      <div className="bg-gray-900 border border-white/10 rounded-2xl">
         <table className="min-w-full divide-y divide-white/10 text-sm">
           <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase">
             <tr>
@@ -56,11 +55,11 @@ export default function ClientsTable({ clients }) {
               const hasScheduledPackage =
                 scheduledSubs.length > 0
 
+              /* ================= PROGRESS ================= */
+
               let visitPercent = 0
               let visitsUsed = 0
               let visitsTotal = 0
-
-              /* ================= PROGRESS FIX ================= */
 
               if (hasActivePackage) {
                 const now = new Date()
@@ -76,23 +75,19 @@ export default function ClientsTable({ clients }) {
                     ) + 1
                   )
 
-                const diffMs = now - startDate
-
                 const usedDays =
-                  diffMs <= 0
+                  now <= startDate
                     ? 0
                     : Math.floor(
-                        diffMs /
+                        (now - startDate) /
                           (1000 * 60 * 60 * 24)
                       )
 
                 const daysPercent =
-                  totalDays > 0
-                    ? Math.min(
-                        (usedDays / totalDays) * 100,
-                        100
-                      )
-                    : 0
+                  Math.min(
+                    (usedDays / totalDays) * 100,
+                    100
+                  )
 
                 if (activeSub.visitLimit === null) {
                   visitPercent = daysPercent
@@ -107,7 +102,8 @@ export default function ClientsTable({ clients }) {
                   const visitUsagePercent =
                     visitsTotal > 0
                       ? Math.min(
-                          (visitsUsed / visitsTotal) *
+                          (visitsUsed /
+                            visitsTotal) *
                             100,
                           100
                         )
@@ -134,13 +130,12 @@ export default function ClientsTable({ clients }) {
                     {index + 1}
                   </td>
 
+                  {/* CLIENT */}
                   <td className="px-6 py-6">
                     <div
                       className="flex items-center gap-4 cursor-pointer"
                       onClick={() =>
-                        navigate(
-                          `/app/clients/${client.id}`
-                        )
+                        navigate(`/app/clients/${client.id}`)
                       }
                     >
                       <img
@@ -153,8 +148,7 @@ export default function ClientsTable({ clients }) {
                           ID: {client.id}
                         </div>
                         <div className="text-white font-semibold text-base">
-                          {client.firstName}{" "}
-                          {client.lastName}
+                          {client.firstName} {client.lastName}
                         </div>
                         <div className="text-gray-400 text-sm">
                           {client.phone}
@@ -163,29 +157,22 @@ export default function ClientsTable({ clients }) {
                     </div>
                   </td>
 
+                  {/* PACKAGE + PROGRESS */}
                   <td className="px-6 py-6">
                     {hasActivePackage ? (
                       <>
                         <div className="text-white">
-                          {
-                            activeSub.packageSnapshot
-                              .name
-                          }
+                          {activeSub.packageSnapshot?.name}
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 text-xs">
-                          {activeSub.visitLimit !==
-                            null && (
+                          {activeSub.visitLimit !== null && (
                             <span className="text-gray-400">
-                              {visitsUsed} /{" "}
-                              {visitsTotal}
+                              {visitsUsed} / {visitsTotal}
                             </span>
                           )}
                           <span className="text-indigo-400 ml-2">
-                            {Math.round(
-                              visitPercent
-                            )}
-                            %
+                            {Math.round(visitPercent)}%
                           </span>
                         </div>
 
@@ -201,10 +188,7 @@ export default function ClientsTable({ clients }) {
                     ) : hasScheduledPackage ? (
                       <div className="text-yellow-400 text-xs space-y-1">
                         <div>
-                          {
-                            scheduledSubs[0]
-                              .packageSnapshot.name
-                          }
+                          {scheduledSubs[0].packageSnapshot?.name}
                         </div>
                         <div>
                           Starts{" "}
@@ -225,21 +209,18 @@ export default function ClientsTable({ clients }) {
                     )}
                   </td>
 
+                  {/* LOCKER */}
                   <td className="px-6 py-6">
                     {activeSession ? (
                       <div className="space-y-2">
                         <div className="text-emerald-400 text-sm">
-                          Locker:{" "}
-                          {
-                            activeSession.lockerCode
-                          }
+                          Locker: {activeSession.lockerCode}
                         </div>
 
                         <button
                           onClick={() =>
                             setCloseData({
-                              session:
-                                activeSession,
+                              session: activeSession,
                               client,
                             })
                           }
@@ -264,6 +245,7 @@ export default function ClientsTable({ clients }) {
                     )}
                   </td>
 
+                  {/* ACTIVITY */}
                   <td className="px-6 py-6 text-sm">
                     {activeSession ? (
                       <button
@@ -277,9 +259,7 @@ export default function ClientsTable({ clients }) {
                         View session
                       </button>
                     ) : (
-                      <span className="text-gray-500">
-                        —
-                      </span>
+                      <span className="text-gray-500">—</span>
                     )}
                   </td>
                 </tr>
@@ -292,38 +272,30 @@ export default function ClientsTable({ clients }) {
       {activateClient && (
         <ActivatePackageDrawer
           client={activateClient}
-          onClose={() => {
-            setActivateClient(null)
-            setRefreshKey(prev => prev + 1)
-          }}
+          onClose={() => setActivateClient(null)}
         />
       )}
 
       {keyClient && (
         <KeypadModal
           mode="checkin"
-          onClose={() =>
-            setKeyClient(null)
-          }
-          onConfirm={(lockerCode) => {
-            const sub =
-              getActiveSubscriptionByClient(
-                keyClient.id
-              )
+          onClose={() => setKeyClient(null)}
+          onConfirm={async (lockerCode) => {
+            if (processing) return
+            setProcessing(true)
 
-            if (!sub) return
-
-            startSession({
-              clientId: keyClient.id,
-              clientName:
-                keyClient.firstName +
-                " " +
-                keyClient.lastName,
-              staffName: "Admin",
-              lockerCode,
-            })
-
-            setKeyClient(null)
+            try {
+              await startSessionFn({
+                gymId: GYM_ID,
+                clientId: keyClient.id,
+                lockerCode,
+              })
+              setKeyClient(null)
+            } catch (err) {
+              alert(err.message || "Session failed")
+            } finally {
+              setProcessing(false)
+            }
           }}
         />
       )}
@@ -336,38 +308,41 @@ export default function ClientsTable({ clients }) {
             </div>
 
             <div className="text-sm text-gray-400">
-              Client:{" "}
-              {
-                closeData.client.firstName
-              }{" "}
-              {
-                closeData.client.lastName
-              }
+              Client: {closeData.client.firstName}{" "}
+              {closeData.client.lastName}
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <button
-                onClick={() =>
-                  setCloseData(null)
-                }
+                onClick={() => setCloseData(null)}
                 className="px-4 py-2 bg-gray-700 rounded-lg"
               >
                 Cancel
               </button>
 
               <button
-                onClick={() => {
-                  endSession(
-                    closeData.session.id
-                  )
-                  setCloseData(null)
+                onClick={async () => {
+                  if (processing) return
+                  setProcessing(true)
+
+                  try {
+                    await endSessionFn({
+                      gymId: GYM_ID,
+                      sessionId: closeData.session.id,
+                    })
+                    setCloseData(null)
+                  } catch (err) {
+                    alert(err.message || "Close failed")
+                  } finally {
+                    setProcessing(false)
+                  }
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"
               >
                 Confirm Close
               </button>
             </div>
-          </div>
+          </div>  
         </div>
       )}
     </>

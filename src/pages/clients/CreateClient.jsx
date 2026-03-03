@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useClientsContext } from "../../modules/clients/domain/ClientsContext"
+import { createClientFn } from "../../firebase"
+
 import {
   UserIcon,
   PhoneIcon,
@@ -11,9 +12,9 @@ import {
 
 export default function CreateClient() {
   const navigate = useNavigate()
-  const { addClient } = useClientsContext()
 
   const [preview, setPreview] = useState(null)
+  const [processing, setProcessing] = useState(false)
 
   const [form, setForm] = useState({
     firstName: "",
@@ -37,28 +38,35 @@ export default function CreateClient() {
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    if (processing) return
 
-    addClient({
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      phone: form.phone.trim(),
-      gender: form.gender,
-      age: null,
-      image: preview || null,
-      note: form.note.trim(),
-    })
+    setProcessing(true)
 
-    navigate("/app/clients")
+    try {
+      await createClientFn({
+        gymId: "sportzal_demo", // keyin authdan olinadi
+        firstName: form.firstName,
+        lastName: form.lastName,
+        phone: form.phone,
+        gender: form.gender,
+        note: form.note,
+        image: preview || null,
+      })
+
+      navigate("/app/clients")
+    } catch (err) {
+      alert(err.message || "Failed to create client")
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (
     <div className="px-6 pt-4 pb-6">
       <div className="max-w-3xl mx-auto bg-gray-900 border border-white/10 rounded-2xl shadow-lg">
         <form onSubmit={handleSubmit}>
-
-          {/* Avatar */}
           <div className="flex flex-col items-center py-5 border-b border-white/10">
             {preview ? (
               <img
@@ -83,10 +91,8 @@ export default function CreateClient() {
             </label>
           </div>
 
-          {/* Body */}
           <div className="p-6 space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
               <div>
                 <label className="flex items-center gap-2 text-xs text-gray-400 mb-1">
                   <UserIcon className="h-4 w-4" />
@@ -147,7 +153,6 @@ export default function CreateClient() {
                   <option value="female">Female</option>
                 </select>
               </div>
-
             </div>
 
             <div>
@@ -163,10 +168,8 @@ export default function CreateClient() {
                 className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-white/10 bg-gray-900/60 rounded-b-2xl">
             <button
               type="button"
@@ -178,12 +181,12 @@ export default function CreateClient() {
 
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-90 text-sm font-semibold transition shadow-md"
+              disabled={processing}
+              className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-90 text-sm font-semibold transition shadow-md disabled:opacity-50"
             >
-              Save
+              {processing ? "Saving..." : "Save"}
             </button>
           </div>
-
         </form>
       </div>
     </div>

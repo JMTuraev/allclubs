@@ -6,32 +6,29 @@ export default function TransactionsTable({
 }) {
 
   /* ============================= */
-  /* SERVICE KO‘RINMAYDI          */
+  /* LEDGER FILTER (cancelledni olib tashlaymiz) */
   /* ============================= */
 
   const visibleTransactions = useMemo(() => {
-    return transactions.filter(
-      (t) => t.type !== "service"
-    )
+    return transactions
+      .filter((t) => t.status !== "cancelled")
+      .filter((t) => t.type !== "service")
   }, [transactions])
 
   /* ============================= */
-  /* TOTAL FAqat PAYMENT          */
+  /* TOTAL (REAL LEDGER MODEL)    */
   /* ============================= */
 
   const totalAmount = useMemo(() => {
-    return visibleTransactions
-      .filter(t => t.type === "payment")
-      .reduce(
-        (sum, t) => sum + Number(t.amount || 0),
-        0
-      )
+    return visibleTransactions.reduce(
+      (sum, t) => sum + Number(t.amount || 0),
+      0
+    )
   }, [visibleTransactions])
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden">
 
-      {/* HEADER */}
       <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
         <h2 className="text-lg font-semibold">
           Transactions
@@ -75,39 +72,34 @@ export default function TransactionsTable({
               const amount = Number(t.amount || 0)
               const isNegative = amount < 0
 
-              /* 🔴 Replace bilan bog‘liqmi */
-              const isReplaceRelated =
-                t.meta?.replaceRefund ||
-                t.meta?.replacedOriginal ||
-                t.meta?.replacedPackageId
+              /* 🔥 FIRESTORE TIMESTAMP FIX */
+              const date =
+                t.createdAt?.toDate
+                  ? t.createdAt.toDate()
+                  : t.createdAt
+                  ? new Date(t.createdAt)
+                  : null
 
               return (
                 <tr
                   key={`${t.id}-${i}`}
-                  className={`border-t border-white/5 ${
-                    isReplaceRelated
-                      ? "bg-red-500/10"
-                      : ""
-                  }`}
+                  className="border-t border-white/5"
                 >
-                  {/* DATE */}
                   <td className="p-3">
-                    {new Date(t.createdAt).toLocaleDateString()}
+                    {date
+                      ? date.toLocaleDateString()
+                      : "-"}
                   </td>
 
-                  {/* CLIENT */}
                   <td className="p-3">
                     {client
                       ? `${client.firstName} ${client.lastName}`
                       : "Unknown"}
                   </td>
 
-                  {/* METHOD */}
                   <td
                     className={`p-3 capitalize font-medium ${
-                      isReplaceRelated
-                        ? "text-red-400"
-                        : isNegative
+                      isNegative
                         ? "text-red-400"
                         : "text-green-400"
                     }`}
@@ -115,12 +107,9 @@ export default function TransactionsTable({
                     {t.paymentMethod}
                   </td>
 
-                  {/* AMOUNT */}
                   <td
                     className={`p-3 text-right font-semibold ${
-                      isReplaceRelated
-                        ? "text-red-500"
-                        : isNegative
+                      isNegative
                         ? "text-red-500"
                         : "text-green-400"
                     }`}
@@ -128,7 +117,6 @@ export default function TransactionsTable({
                     {!isNegative && "+"}
                     {amount.toLocaleString()} сум
                   </td>
-
                 </tr>
               )
             })}

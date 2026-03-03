@@ -43,24 +43,24 @@ export default function ClientProfilePage() {
   const allSubscriptions =
     getSubscriptionsByClient(id)
 
+  // ✅ startDate ishlatamiz
   const sortedSubscriptions = useMemo(() => {
     return [...allSubscriptions].sort(
       (a, b) =>
-        new Date(b.startedAt) -
-        new Date(a.startedAt)
+        new Date(b.startDate) -
+        new Date(a.startDate)
     )
   }, [allSubscriptions])
 
   const [currentIndex, setCurrentIndex] =
     useState(null)
 
-  // Default faqat bir marta set qilinadi
   useEffect(() => {
     if (
       sortedSubscriptions.length &&
       currentIndex === null
     ) {
-      setCurrentIndex(0) // eng yangi
+      setCurrentIndex(0)
     }
   }, [sortedSubscriptions, currentIndex])
 
@@ -81,23 +81,28 @@ export default function ClientProfilePage() {
     [sessions, id]
   )
 
+  // ✅ startDate / endDate ishlatamiz
   const filteredSessions =
     useMemo(() => {
       if (!selectedSubscription)
         return []
 
       const start = new Date(
-        selectedSubscription.startedAt
+        selectedSubscription.startDate
       )
+
       const end = new Date(
-        selectedSubscription.expiresAt
+        selectedSubscription.endDate
       )
 
       return clientSessions.filter(
         (s) => {
+          if (!s.startedAt) return false
+
           const d = new Date(
-            s.createdAt
+            s.startedAt
           )
+
           return (
             d >= start && d <= end
           )
@@ -193,8 +198,7 @@ export default function ClientProfilePage() {
 
             {currentIndex !== null &&
               currentIndex <
-                sortedSubscriptions.length -
-                  1 && (
+                sortedSubscriptions.length - 1 && (
                 <button
                   onClick={() =>
                     setCurrentIndex(

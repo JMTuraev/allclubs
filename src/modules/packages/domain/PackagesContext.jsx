@@ -1,197 +1,150 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  query,
+  orderBy,
+} from "firebase/firestore"
+
+import { db } from "../../../firebase"
 
 const PackagesContext = createContext(null)
 
 export function PackagesProvider({ children }) {
+  const [packages, setPackages] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const calculateVisitLimit = (duration, bonusDays) => {
-    return Number(duration || 0) + Number(bonusDays || 0)
-  }
+  const gymId = "sportzal_demo" // keyin authdan olamiz
 
-const [packages, setPackages] = useState([
-  {
-    id: 101,
-    name: "1 месяц стандарт",
-    duration: 30,
-    bonusDays: 0,
-    price: 450000,
+  /* ================= REALTIME LISTENER ================= */
 
-    visitLimit: 30, // 🔒 30 + 0
+  useEffect(() => {
+    const q = query(
+      collection(db, "gyms", gymId, "packages"),
+      orderBy("createdAt", "desc")
+    )
 
-    startTime: null,
-    endTime: null,
-    freezeEnabled: false,
-    maxFreezeDays: 0,
-    gender: "all",
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list = snapshot.docs
+          .map((docSnap) => ({
+            id: docSnap.id, // 🔥 AUTO ID
+            ...docSnap.data(),
+          }))
+          .filter((p) => !p.isArchived) // 🔥 archive filter JS ichida
 
-    description: "Стандартный абонемент на 30 дней.",
-    gradient: "from-indigo-500 to-indigo-700",
+        setPackages(list)
+        setLoading(false)
+      },
+      (error) => {
+        console.error("Packages listener error:", error)
+        setLoading(false)
+      }
+    )
 
-    isArchived: false,
-    createdAt: new Date().toISOString(),
-  },
+    return () => unsubscribe()
+  }, [gymId])
 
-  {
-    id: 102,
-    name: "3 месяца + бонус",
-    duration: 90,
-    bonusDays: 5,
-    price: 1200000,
+  /* ================= ADD (AUTO ID) ================= */
 
-    visitLimit: 95, // 🔒 90 + 5
-
-    startTime: null,
-    endTime: null,
-    freezeEnabled: true,
-    maxFreezeDays: 14,
-    gender: "all",
-
-    description: "Абонемент на 3 месяца + 5 бонусных дней.",
-    gradient: "from-purple-500 to-purple-700",
-
-    isArchived: false,
-    createdAt: new Date().toISOString(),
-  },
-
-  {
-    id: 103,
-    name: "Утренний (07:00–12:00)",
-    duration: 30,
-    bonusDays: 0,
-    price: 300000,
-
-    visitLimit: 30, // 🔒 30 + 0
-
-    startTime: "07:00",
-    endTime: "12:00",
-    freezeEnabled: false,
-    maxFreezeDays: 0,
-    gender: "all",
-
-    description: "Доступ только утром (07:00–12:00).",
-    gradient: "from-amber-500 to-orange-600",
-
-    isArchived: false,
-    createdAt: new Date().toISOString(),
-  },
-
-  {
-    id: 104,
-    name: "Женский фитнес",
-    duration: 30,
-    bonusDays: 2,
-    price: 380000,
-
-    visitLimit: 32, // 🔒 30 + 2
-
-    startTime: "08:00",
-    endTime: "16:00",
-    freezeEnabled: true,
-    maxFreezeDays: 7,
-    gender: "female",
-
-    description: "Дневной абонемент для женщин (08:00–16:00).",
-    gradient: "from-pink-500 to-rose-600",
-
-    isArchived: false,
-    createdAt: new Date().toISOString(),
-  },
-])
-
-  /* ================= ADD ================= */
-
-  const addPackage = (pkg) => {
-
+  const addPackage = async (pkg) => {
     const duration = Number(pkg.duration)
-    const bonusDays = Number(pkg.bonusDays)
+    const bonusDays = Number(pkg.bonusDays || 0)
     const price = Number(pkg.price)
 
-    if (duration <= 0 || price <= 0) return
+    if (!duration || duration <= 0) {
+      throw new Error("Duration must be greater than 0")
+    }
 
-    const visitLimit = calculateVisitLimit(duration, bonusDays)
+    if (!price || price <= 0) {
+      throw new Error("Price must be greater than 0")
+    }
 
-    setPackages(prev => [
-      ...prev,
-      {
-        ...pkg,
-        duration,
-        bonusDays,
-        price,
-        visitLimit,     // 🔒 always auto
-        isUnlimited: false, // 🔒 forced
+    const visitLimit = duration + bonusDays
 
-        id: Date.now(),
-        isArchived: false,
-        createdAt: new Date().toISOString(),
-      },
-    ])
+    await addDoc(collection(db, "gyms", gymId, "packages"), {
+      name: pkg.name || "",
+      duration,
+      bonusDays,
+      price,
+      visitLimit,
+      type: "fixed",
+      isUnlimited: false,
+      startTime: pkg.startTime || null,
+      endTime: pkg.endTime || null,
+      freezeEnabled: !!pkg.freezeEnabled,
+      maxFreezeDays: pkg.freezeEnabled
+        ? Number(pkg.maxFreezeDays || 0)
+        : 0,
+      gender: pkg.gender || "all",
+      gradient: pkg.gradient || "from-indigo-500 to-indigo-700",
+      description: pkg.description || "",
+      isArchived: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
   }
 
   /* ================= UPDATE ================= */
 
-  const updatePackage = (id, updates) => {
+  const updatePackage = async (id, updates) => {
+    const ref = doc(db, "gyms", gymId, "packages", id)
 
-    setPackages(prev =>
-      prev.map(p => {
-        if (p.id !== id) return p
+    const duration = Number(updates.duration)
+    const bonusDays = Number(updates.bonusDays || 0)
+    const price = Number(updates.price)
 
-        const duration = Number(
-          updates.duration ?? p.duration
-        )
+    if (!duration || duration <= 0) {
+      throw new Error("Duration must be greater than 0")
+    }
 
-        const bonusDays = Number(
-          updates.bonusDays ?? p.bonusDays
-        )
+    if (!price || price <= 0) {
+      throw new Error("Price must be greater than 0")
+    }
 
-        const price = Number(
-          updates.price ?? p.price
-        )
+    const visitLimit = duration + bonusDays
 
-        if (duration <= 0 || price <= 0) {
-          return p
-        }
-
-        const visitLimit = calculateVisitLimit(
-          duration,
-          bonusDays
-        )
-
-        return {
-          ...p,
-          ...updates,
-          duration,
-          bonusDays,
-          price,
-          visitLimit,
-          isUnlimited: false, // 🔒 forced
-        }
-      })
-    )
+    await updateDoc(ref, {
+      name: updates.name || "",
+      duration,
+      bonusDays,
+      price,
+      visitLimit,
+      isUnlimited: false,
+      startTime: updates.startTime || null,
+      endTime: updates.endTime || null,
+      freezeEnabled: !!updates.freezeEnabled,
+      maxFreezeDays: updates.freezeEnabled
+        ? Number(updates.maxFreezeDays || 0)
+        : 0,
+      gender: updates.gender || "all",
+      gradient: updates.gradient || "from-indigo-500 to-indigo-700",
+      description: updates.description || "",
+      updatedAt: serverTimestamp(),
+    })
   }
 
   /* ================= SOFT DELETE ================= */
 
-  const deletePackage = (id) => {
-    setPackages(prev =>
-      prev.map(p =>
-        p.id === id
-          ? { ...p, isArchived: true }
-          : p
-      )
-    )
+  const deletePackage = async (id) => {
+    const ref = doc(db, "gyms", gymId, "packages", id)
+
+    await updateDoc(ref, {
+      isArchived: true,
+      updatedAt: serverTimestamp(),
+    })
   }
-
-  /* ================= GETTERS ================= */
-
-  const activePackages = packages.filter(
-    p => !p.isArchived
-  )
 
   return (
     <PackagesContext.Provider
       value={{
-        packages: activePackages,
-        allPackages: packages,
+        packages,
+        loading,
         addPackage,
         updatePackage,
         deletePackage,
@@ -206,9 +159,7 @@ export function usePackages() {
   const context = useContext(PackagesContext)
 
   if (!context) {
-    throw new Error(
-      "usePackages must be used inside PackagesProvider"
-    )
+    throw new Error("usePackages must be used inside PackagesProvider")
   }
 
   return context

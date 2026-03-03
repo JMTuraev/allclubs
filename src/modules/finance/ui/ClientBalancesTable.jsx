@@ -4,7 +4,7 @@ export default function ClientBalancesTable({ data, onClientClick }) {
   return (
  
 
-      {data.length === 0 ? (
+      {data?.length === 0 ? (
         <div className="text-gray-500 p-6 text-center">
           No client activity
         </div>

@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react"
 import { useSubscriptionsContext } from "../domain/SubscriptionsContext"
+import { useClientsContext } from "../../clients/domain/ClientsContext"
 import ActivatePackageDrawer from "./ActivatePackageDrawer"
 import { ChatBubbleLeftEllipsisIcon } from "@heroicons/react/24/outline"
 
 export default function SoldPackagesList() {
   const { subscriptions = [] } = useSubscriptionsContext()
+  const { clients = [] } = useClientsContext()
 
   const [editSub, setEditSub] = useState(null)
   const [replaceSub, setReplaceSub] = useState(null)
@@ -38,15 +40,32 @@ export default function SoldPackagesList() {
 
             <tbody className="divide-y divide-white/5">
               {rows.map((sub) => {
+                /* ================= CLIENT FALLBACK ================= */
+
+                const client = clients.find(
+                  (c) => String(c.id) === String(sub.clientId)
+                )
+
+                const clientName =
+                  sub.clientName ||
+                  (client
+                    ? `${client.firstName} ${client.lastName}`
+                    : "Unknown")
+
+                const clientPhone =
+                  sub.clientPhone ||
+                  (client ? client.phone : "")
+
+                /* ================= VISITS ================= */
+
                 const usedVisits =
                   sub.visitLimit != null
-                    ? sub.visitLimit - sub.remainingVisits
+                    ? sub.visitLimit - (sub.remainingVisits ?? 0)
                     : null
 
-                const isReplaced =
-                  sub.status === "replaced"
+                /* ================= STATUS ================= */
 
-                /* ===== PROFESSIONAL ACTION RULES ===== */
+                const isReplaced = sub.status === "replaced"
 
                 const canEdit =
                   !isReplaced &&
@@ -69,6 +88,7 @@ export default function SoldPackagesList() {
                         : "hover:bg-gray-800/40"
                     }`}
                   >
+                    {/* CLIENT */}
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span
@@ -78,38 +98,44 @@ export default function SoldPackagesList() {
                               : "text-white"
                           }`}
                         >
-                          {sub.clientName}
+                          {clientName}
                         </span>
                         <span className="text-gray-400 text-xs">
-                          {sub.clientPhone}
+                          {clientPhone}
                         </span>
                       </div>
                     </td>
 
+                    {/* PACKAGE */}
                     <td className="px-6 py-4 text-gray-300">
-                      {sub.packageSnapshot?.name}
+                      {sub.packageSnapshot?.name || "-"}
                     </td>
 
+                    {/* VISITS */}
                     <td className="px-6 py-4 text-gray-400">
                       {usedVisits === null
                         ? "Unlimited"
                         : `${usedVisits} / ${sub.visitLimit}`}
                     </td>
 
+                    {/* START */}
                     <td className="px-6 py-4 text-gray-400">
                       {sub.startDate
                         ? new Date(sub.startDate).toLocaleDateString()
                         : "-"}
                     </td>
 
+                    {/* EXPIRE */}
                     <td className="px-6 py-4 text-gray-400">
                       {sub.endDate
                         ? new Date(sub.endDate).toLocaleDateString()
                         : "-"}
                     </td>
 
+                    {/* STATUS */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
+
                         {sub.status === "active" && (
                           <span className="px-2 py-1 text-xs rounded bg-green-600 text-white">
                             Active
@@ -156,13 +182,12 @@ export default function SoldPackagesList() {
                       </div>
                     </td>
 
+                    {/* ACTIONS */}
                     <td className="px-6 py-4">
                       <div className="flex gap-4">
                         {canEdit && (
                           <button
-                            onClick={() =>
-                              setEditSub(sub)
-                            }
+                            onClick={() => setEditSub(sub)}
                             className="text-indigo-400 hover:underline text-sm"
                           >
                             Edit
@@ -171,9 +196,7 @@ export default function SoldPackagesList() {
 
                         {canReplace && (
                           <button
-                            onClick={() =>
-                              setReplaceSub(sub)
-                            }
+                            onClick={() => setReplaceSub(sub)}
                             className="text-indigo-400 hover:underline text-sm"
                           >
                             Replace
@@ -189,13 +212,16 @@ export default function SoldPackagesList() {
         </div>
       </div>
 
+      {/* EDIT */}
       {editSub && (
         <ActivatePackageDrawer
           client={{
             id: editSub.clientId,
-            firstName: editSub.clientName?.split(" ")[0],
-            lastName: editSub.clientName?.split(" ")[1],
-            phone: editSub.clientPhone,
+            firstName:
+              editSub.clientName?.split(" ")[0] || "",
+            lastName:
+              editSub.clientName?.split(" ")[1] || "",
+            phone: editSub.clientPhone || "",
           }}
           editStartOnly
           editSubscription={editSub}
@@ -203,13 +229,16 @@ export default function SoldPackagesList() {
         />
       )}
 
+      {/* REPLACE */}
       {replaceSub && (
         <ActivatePackageDrawer
           client={{
             id: replaceSub.clientId,
-            firstName: replaceSub.clientName?.split(" ")[0],
-            lastName: replaceSub.clientName?.split(" ")[1],
-            phone: replaceSub.clientPhone,
+            firstName:
+              replaceSub.clientName?.split(" ")[0] || "",
+            lastName:
+              replaceSub.clientName?.split(" ")[1] || "",
+            phone: replaceSub.clientPhone || "",
           }}
           editSubscription={replaceSub}
           onClose={() => setReplaceSub(null)}
