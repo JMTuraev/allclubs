@@ -1,17 +1,16 @@
 import { createContext, useContext, useState } from "react";
 import { useProducts } from "../ProductContext";
 import { useBarInvoice } from "../../modules/bar/domain/useBarInvoice";
-import { v4 as uuid } from "uuid";
+import { createBarIncomingFn } from "../../firebase";
 
 const BarContext = createContext();
 export const useBar = () => useContext(BarContext);
 
+const gymId = "sportzal_demo";
+
 export function BarProvider({ children }) {
-  const {
-    categories,
-    products,
-    updateProduct
-  } = useProducts();
+
+  const { categories, products } = useProducts();
 
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -33,40 +32,35 @@ export function BarProvider({ children }) {
     invoice.addToInvoice(product);
   };
 
-  /* ================= HISTORY STATE ================= */
+  /* ================= SAVE INCOMING ================= */
 
-  const [incomingInvoices, setIncomingInvoices] = useState([]);
+  const saveIncomingInvoice = async () => {
 
-  const saveIncomingInvoice = () => {
     if (!invoice.invoiceItems.length) return;
 
-    invoice.invoiceItems.forEach(item => {
-      const currentProduct = products.find(
-        p => p.id === item.id
-      );
+    try {
 
-      if (!currentProduct) return;
+      const items = invoice.invoiceItems.map(item => ({
+        productId: item.id,
+        quantity: Number(item.quantity),
+        purchasePrice: Number(item.purchasePrice)
+      }));
 
-      updateProduct(item.id, {
-        stock: (currentProduct.stock || 0) + item.quantity,
-        purchasePrice: Number(item.purchasePrice) || 0
+      await createBarIncomingFn({
+        gymId,
+        items
       });
-    });
 
-    const newInvoice = {
-      id: uuid(),
-      invoiceNumber: "INC-" + Date.now().toString().slice(-6),
-      date: new Date().toISOString().split("T")[0],
-      items: invoice.invoiceItems,
-      total: invoice.invoiceTotal,
-    };
+      invoice.clearInvoice();
 
-    setIncomingInvoices(prev => [
-      newInvoice,
-      ...prev,
-    ]);
+      console.log("Incoming invoice saved");
 
-    invoice.clearInvoice();
+    } catch (err) {
+
+      console.error("Incoming save error:", err);
+
+      alert(err.message);
+    }
   };
 
   return (
@@ -90,12 +84,11 @@ export function BarProvider({ children }) {
         updatePurchasePrice: invoice.updatePurchasePrice,
         removeItem: invoice.removeItem,
 
-        /* history */
-        incomingInvoices,
+        /* save */
         saveIncomingInvoice,
       }}
     >
       {children}
     </BarContext.Provider>
   );
-}
+} 

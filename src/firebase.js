@@ -6,8 +6,12 @@ import {
   signInAnonymously,
   onAuthStateChanged
 } from "firebase/auth";
+
 import { getFirestore } from "firebase/firestore";
+
 import { getFunctions, httpsCallable } from "firebase/functions";
+
+import { getStorage } from "firebase/storage";
 
 /* ===============================
    Firebase Config
@@ -17,7 +21,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAUJByhmFIvF6mjonwhr9fDEnwebPagFQ4",
   authDomain: "allclubs.firebaseapp.com",
   projectId: "allclubs",
-  storageBucket: "allclubs.appspot.com",
+    storageBucket: "allclubs.firebasestorage.app", // 🔧 shu yer
   messagingSenderId: "1047960307680",
   appId: "1:1047960307680:web:12a1352000a4d1992d0d85",
   measurementId: "G-89YHC2S4DT"
@@ -35,6 +39,7 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 const functions = getFunctions(app, "asia-south1");
 
@@ -97,4 +102,54 @@ export const endSessionFn = httpsCallable(
 export const createClientFn = httpsCallable(
   functions,
   "createClient"
+);
+
+export const getOrCreateOpenBarCheckFn = httpsCallable(
+  functions,
+  "getOrCreateOpenBarCheck"
+);
+
+export const addItemToBarCheckFn = httpsCallable(
+  functions,
+  "addItemToBarCheck"
+);
+
+export const decreaseItemFromBarCheckFn = httpsCallable(
+  functions,
+  "decreaseItemFromBarCheck"
+);
+
+export const createBarCategoryFn = httpsCallable(
+  functions,
+  "createBarCategory"
+);
+
+export const updateBarCategoryFn = httpsCallable(
+  functions,
+  "updateBarCategory"
+);
+
+export const deleteBarCategoryFn = httpsCallable(
+  functions,
+  "deleteBarCategory"
+);
+
+export const createBarProductFn = httpsCallable(
+  functions,
+  "createBarProduct"
+);
+
+export const updateBarProductFn = httpsCallable(
+  functions,
+  "updateBarProduct"
+);
+
+export const deleteBarProductFn = httpsCallable(
+  functions,
+  "deleteBarProduct"
+);
+
+export const createBarIncomingFn = httpsCallable(
+  functions,
+  "createBarIncoming"
 );

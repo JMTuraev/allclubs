@@ -18,7 +18,7 @@ export default function PosProducts({
     >
       <ProductGridLayout>
         {products.map(product => {
-          const cartItem = cart.find(i => i.id === product.id);
+          const cartItem = cart.find(i => i.productId === product.id);
 
           const isOutOfStock = product.stock <= 0;
           const isDisabled = !selectedClient || isOutOfStock;

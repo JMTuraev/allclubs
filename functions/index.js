@@ -945,3 +945,520 @@ exports.createClient = onCall(async (request) => {
     return { success: true };
   });
 });
+
+exports.getOrCreateOpenBarCheck = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, sessionId, clientId } = request.data;
+
+  if (!gymId || !sessionId || !clientId) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const checksRef = db.collection(`gyms/${gymId}/barChecks`);
+  const sessionRef = db.doc(`gyms/${gymId}/sessions/${sessionId}`);
+
+  return db.runTransaction(async (tx) => {
+
+    /* 1️⃣ SESSION VALIDATION */
+
+    const sessionSnap = await tx.get(sessionRef);
+
+    if (!sessionSnap.exists) {
+      throw new HttpsError("not-found", "Session not found");
+    }
+
+    if (sessionSnap.data().status !== "active") {
+      throw new HttpsError("failed-precondition", "Session not active");
+    }
+
+    /* 2️⃣ EXISTING OPEN CHECK SEARCH */
+
+    const openCheckSnap = await tx.get(
+      checksRef
+        .where("sessionId", "==", sessionId)
+        .where("status", "==", "open")
+        .limit(1)
+    );
+
+    if (!openCheckSnap.empty) {
+      return {
+        checkId: openCheckSnap.docs[0].id,
+        created: false
+      };
+    }
+
+    /* 3️⃣ CREATE NEW OPEN CHECK */
+
+    const newCheckRef = checksRef.doc();
+
+    tx.set(newCheckRef, {
+      sessionId,
+      clientId,
+      status: "open",
+      total: 0,
+      paidAmount: 0,
+      debtAmount: 0,
+      items: [],
+      payments: [],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return {
+      checkId: newCheckRef.id,
+      created: true
+    };
+  });
+});
+
+exports.addItemToBarCheck = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, checkId, productId, quantity } = request.data;
+
+  if (!gymId || !checkId || !productId || !quantity) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const checkRef = db.doc(`gyms/${gymId}/barChecks/${checkId}`);
+  const productRef = db.doc(`gyms/${gymId}/barProducts/${productId}`);
+
+  return db.runTransaction(async (tx) => {
+
+    /* 1️⃣ GET CHECK */
+    const checkSnap = await tx.get(checkRef);
+    if (!checkSnap.exists) {
+      throw new HttpsError("not-found", "Check not found");
+    }
+
+    const check = checkSnap.data();
+    if (check.status !== "open") {
+      throw new HttpsError("failed-precondition", "Check closed");
+    }
+
+    /* 2️⃣ GET PRODUCT */
+    const productSnap = await tx.get(productRef);
+    if (!productSnap.exists) {
+      throw new HttpsError("not-found", "Product not found");
+    }
+
+    const product = productSnap.data();
+
+    if ((product.stock || 0) < quantity) {
+      throw new HttpsError("failed-precondition", "Not enough stock");
+    }
+
+    /* 3️⃣ UPDATE STOCK */
+    tx.update(productRef, {
+      stock: admin.firestore.FieldValue.increment(-quantity),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    /* 4️⃣ UPDATE CHECK ITEMS */
+
+    const existingItem = check.items.find(
+      i => i.productId === productId
+    );
+
+    let newItems;
+
+    if (existingItem) {
+      newItems = check.items.map(i =>
+        i.productId === productId
+          ? { ...i, qty: i.qty + quantity }
+          : i
+      );
+    } else {
+      newItems = [
+        ...check.items,
+        {
+          productId,
+          name: product.name,
+          qty: quantity,
+          price: product.price
+        }
+      ];
+    }
+
+    const newTotal = newItems.reduce(
+      (sum, i) => sum + i.qty * i.price,
+      0
+    );
+
+    tx.update(checkRef, {
+      items: newItems,
+      total: newTotal,
+      debtAmount: newTotal - (check.paidAmount || 0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true };
+  });
+});
+
+exports.decreaseItemFromBarCheck = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, checkId, productId } = request.data;
+
+  if (!gymId || !checkId || !productId) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const checkRef = db.doc(`gyms/${gymId}/barChecks/${checkId}`);
+  const productRef = db.doc(`gyms/${gymId}/barProducts/${productId}`);
+
+  return db.runTransaction(async (tx) => {
+
+    const checkSnap = await tx.get(checkRef);
+    if (!checkSnap.exists) {
+      throw new HttpsError("not-found", "Check not found");
+    }
+
+    const check = checkSnap.data();
+
+    if (check.status !== "open") {
+      throw new HttpsError("failed-precondition", "Check closed");
+    }
+
+    const item = check.items.find(i => i.productId === productId);
+    if (!item) {
+      throw new HttpsError("not-found", "Item not found");
+    }
+
+    // 1️⃣ Stockni qaytaramiz
+    tx.update(productRef, {
+      stock: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2️⃣ Qty kamaytirish yoki o‘chirish
+    let newItems;
+
+    if (item.qty === 1) {
+      newItems = check.items.filter(i => i.productId !== productId);
+    } else {
+      newItems = check.items.map(i =>
+        i.productId === productId
+          ? { ...i, qty: i.qty - 1 }
+          : i
+      );
+    }
+
+    const newTotal = newItems.reduce(
+      (sum, i) => sum + i.qty * i.price,
+      0
+    );
+
+    tx.update(checkRef, {
+      items: newItems,
+      total: newTotal,
+      debtAmount: newTotal - (check.paidAmount || 0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true };
+  });
+});
+
+exports.createBarCategory = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, name } = request.data;
+
+  if (!gymId || !name) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const ref = db.collection(`gyms/${gymId}/barCategories`).doc();
+
+  await ref.set({
+    name,
+    isActive: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return { id: ref.id };
+});
+
+exports.updateBarCategory = onCall(async (request) => {
+
+  const { gymId, categoryId, name } = request.data;
+
+  const ref = db.doc(`gyms/${gymId}/barCategories/${categoryId}`);
+
+  await ref.update({
+    name,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return { success: true };
+});
+
+exports.deleteBarCategory = onCall(async (request) => {
+
+  const { gymId, categoryId } = request.data;
+
+  const products = await db
+    .collection(`gyms/${gymId}/barProducts`)
+    .where("categoryId", "==", categoryId)
+    .limit(1)
+    .get();
+
+  if (!products.empty) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Category has products"
+    );
+  }
+
+  const ref = db.doc(`gyms/${gymId}/barCategories/${categoryId}`);
+
+  await ref.update({
+    isActive: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return { success: true };
+});
+
+
+
+/* ================= CREATE PRODUCT ================= */
+
+exports.createBarProduct = onCall(async (request) => {
+
+  /* ================= AUTH CHECK ================= */
+
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Login required"
+    );
+  }
+
+  /* ================= INPUT ================= */
+
+  const { gymId, data } = request.data || {};
+
+  if (!gymId) {
+    throw new HttpsError(
+      "invalid-argument",
+      "gymId required"
+    );
+  }
+
+  if (!data?.name) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Product name required"
+    );
+  }
+
+  if (!data?.categoryId) {
+    throw new HttpsError(
+      "invalid-argument",
+      "categoryId required"
+    );
+  }
+
+  /* ================= CREATE PRODUCT ================= */
+
+  const ref = db
+    .collection(`gyms/${gymId}/barProducts`)
+    .doc();
+
+  await ref.set({
+    name: data.name,
+    categoryId: data.categoryId,
+    price: Number(data.price) || 0,
+    image: data.image || "",
+    stock: 0,
+    purchasePrice: 0,
+    isActive: true,
+
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  /* ================= RETURN ================= */
+
+  return {
+    id: ref.id
+  };
+
+});
+/* ================= UPDATE PRODUCT ================= */
+
+exports.updateBarProduct = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const data = request.data;
+
+  if (!data) {
+    throw new HttpsError("invalid-argument", "No data provided");
+  }
+
+  const { gymId, productId, updates } = data;
+
+  if (!gymId || !productId) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const ref = db.doc(`gyms/${gymId}/barProducts/${productId}`);
+
+  await ref.update({
+    ...updates,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return {
+    success: true
+  };
+
+});
+
+/* ================= DELETE PRODUCT (SOFT DELETE) ================= */
+
+exports.deleteBarProduct = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const data = request.data;
+
+  if (!data) {
+    throw new HttpsError("invalid-argument", "No data provided");
+  }
+
+  const { gymId, productId } = data;
+
+  if (!gymId || !productId) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const ref = db.doc(`gyms/${gymId}/barProducts/${productId}`);
+
+  await ref.update({
+    isActive: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+
+  return {
+    success: true
+  };
+
+});
+
+
+exports.createBarIncoming = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, items } = request.data;
+
+  if (!gymId) {
+    throw new HttpsError("invalid-argument", "gymId required");
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new HttpsError("invalid-argument", "items required");
+  }
+
+  const incomingRef = db.collection(`gyms/${gymId}/barIncoming`).doc();
+
+  let total = 0;
+
+  await db.runTransaction(async (tx) => {
+
+    for (const item of items) {
+
+      const {
+        productId,
+        quantity,
+        purchasePrice
+      } = item;
+
+      if (!productId || !quantity || !purchasePrice) {
+        throw new HttpsError(
+          "invalid-argument",
+          "invalid item"
+        );
+      }
+
+      const productRef = db.doc(
+        `gyms/${gymId}/barProducts/${productId}`
+      );
+
+      const productSnap = await tx.get(productRef);
+
+      if (!productSnap.exists) {
+        throw new HttpsError(
+          "not-found",
+          "product not found"
+        );
+      }
+
+      const product = productSnap.data();
+
+      /* 🔴 VALIDATION */
+
+      if (purchasePrice > product.price) {
+        throw new HttpsError(
+          "failed-precondition",
+          `${product.name}: purchase price cannot exceed selling price`
+        );
+      }
+
+      /* 🧮 TOTAL */
+
+      total += quantity * purchasePrice;
+
+      /* 📦 UPDATE STOCK */
+
+      tx.update(productRef, {
+        stock: (product.stock || 0) + quantity,
+        purchasePrice,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+    }
+
+    /* 💾 SAVE INVOICE */
+
+    tx.set(incomingRef, {
+      invoiceNumber:
+        "INC-" + Date.now().toString().slice(-6),
+      items,
+      total,
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp()
+    });
+
+  });
+
+  return {
+    id: incomingRef.id
+  };
+
+});

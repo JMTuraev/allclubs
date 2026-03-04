@@ -24,7 +24,7 @@ export default function CheckoutPanel({
 
         {cart.map(item => (
           <div
-            key={item.id}
+            key={item.productId}
             className="flex justify-between items-center text-sm"
           >
             <div className="min-w-0">
@@ -42,7 +42,7 @@ export default function CheckoutPanel({
               </div>
 
               <button
-                onClick={() => onDecrease(item.id)}
+                onClick={() => onDecrease(item.productId)}
                 className="text-xs text-red-400 hover:text-red-500"
               >
                 ✕

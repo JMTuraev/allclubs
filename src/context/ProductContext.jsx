@@ -1,83 +1,143 @@
-import { createContext, useContext, useState } from "react";
-import { v4 as uuid } from "uuid";
+import { createContext, useContext, useEffect, useState } from "react";
+
+import {
+  collection,
+  query,
+  where,
+  onSnapshot
+} from "firebase/firestore";
+
+import { db } from "../firebase";
+
+import {
+  createBarCategoryFn,
+  updateBarCategoryFn,
+  deleteBarCategoryFn,
+  createBarProductFn,
+  updateBarProductFn,
+  deleteBarProductFn
+} from "../firebase";
 
 const ProductContext = createContext();
 
+const gymId = "sportzal_demo";
+
 export function ProductProvider({ children }) {
 
-  /* ================= CATEGORIES ================= */
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
 
-  const [categories, setCategories] = useState([
-    { id: "cat_1", name: "Drinks", isActive: true },
-    { id: "cat_2", name: "Snacks", isActive: true },
-  ]);
+  /* ================= CATEGORY LISTENER ================= */
 
-  const addCategory = (name) => {
-    const newCategory = {
-      id: uuid(),
-      name,
-      isActive: true,
+  useEffect(() => {
+
+    const q = query(
+      collection(db, `gyms/${gymId}/barCategories`),
+      where("isActive", "==", true)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+
+      const list = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      setCategories(list);
+
+    });
+
+    return () => unsub();
+
+  }, []);
+
+  /* ================= PRODUCT LISTENER ================= */
+
+  useEffect(() => {
+
+    const q = query(
+      collection(db, `gyms/${gymId}/barProducts`),
+      where("isActive", "==", true)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+
+      const list = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      setProducts(list);
+
+    });
+
+    return () => unsub();
+
+  }, []);
+
+  /* ================= CATEGORY CRUD ================= */
+
+  const addCategory = async (name) => {
+
+    const res = await createBarCategoryFn({
+      gymId,
+      name
+    });
+
+    return {
+      id: res.data.id,
+      name
     };
-    setCategories(prev => [...prev, newCategory]);
-    return newCategory;
+
   };
 
-  const updateCategory = (id, name) => {
-    setCategories(prev =>
-      prev.map(cat =>
-        cat.id === id ? { ...cat, name } : cat
-      )
-    );
+  const updateCategory = async (id, name) => {
+
+    await updateBarCategoryFn({
+      gymId,
+      categoryId: id,
+      name
+    });
+
   };
 
-  const deleteCategory = (id) => {
-    setCategories(prev =>
-      prev.filter(cat => cat.id !== id)
-    );
+  const deleteCategory = async (id) => {
 
-    setProducts(prev =>
-      prev.filter(prod => prod.categoryId !== id)
-    );
+    await deleteBarCategoryFn({
+      gymId,
+      categoryId: id
+    });
+
   };
 
-  /* ================= PRODUCTS ================= */
+  /* ================= PRODUCT CRUD ================= */
 
-  const [products, setProducts] = useState([
-    {
-      id: uuid(),
-      categoryId: "cat_1",
-      name: "Protein Shake",
-      price: 15000,
-      image: "/images/1.jpeg",
-      stock: 0, // 🔥 inventory field
-      purchasePrice: 0,
-      isActive: true,
-    },
-  ]);
+  const addProduct = async (data) => {
 
-  const addProduct = (data) => {
-    const newProduct = {
-      id: uuid(),
-      stock: 0,              // 🔥 default stock
-      purchasePrice: 0,
-      ...data,
-      isActive: true,
-    };
-    setProducts(prev => [...prev, newProduct]);
+    await createBarProductFn({
+      gymId,
+      data
+    });
+
   };
 
-  const updateProduct = (id, updates) => {
-    setProducts(prev =>
-      prev.map(prod =>
-        prod.id === id ? { ...prod, ...updates } : prod
-      )
-    );
+  const updateProduct = async (id, updates) => {
+
+    await updateBarProductFn({
+      gymId,
+      productId: id,
+      updates
+    });
+
   };
 
-  const deleteProduct = (id) => {
-    setProducts(prev =>
-      prev.filter(prod => prod.id !== id)
-    );
+  const deleteProduct = async (id) => {
+
+    await deleteBarProductFn({
+      gymId,
+      productId: id
+    });
+
   };
 
   return (
@@ -92,7 +152,7 @@ export function ProductProvider({ children }) {
 
         addProduct,
         updateProduct,
-        deleteProduct,
+        deleteProduct
       }}
     >
       {children}

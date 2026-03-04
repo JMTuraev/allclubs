@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { useBar } from "../../context/bar/BarContext";
+
 import CategorySidebar from "../../components/bar/ui/CategorySidebar";
 import IncomingProducts from "../../modules/bar/incoming/IncomingProducts";
 import InvoicePanel from "../../components/bar/ui/InvoicePanel";
@@ -10,8 +12,10 @@ export default function IncomingGoodsPage() {
     selectedCategory,
     setSelectedCategory,
     filteredProducts,
+
     invoiceItems,
     invoiceTotal,
+
     addToIncomingInvoice,
     updateQuantity,
     updatePurchasePrice,
@@ -19,22 +23,32 @@ export default function IncomingGoodsPage() {
     saveIncomingInvoice
   } = useBar();
 
-  const invoiceNumber =
-    "INC-" + Date.now().toString().slice(-6);
+  /* ================= STABLE VALUES ================= */
 
-  const today =
-    new Date().toISOString().split("T")[0];
+  const invoiceNumber = useMemo(() => {
+    return "INC-" + Date.now().toString().slice(-6);
+  }, []);
+
+  const today = useMemo(() => {
+    return new Date().toISOString().split("T")[0];
+  }, []);
+
+  /* ================= RENDER ================= */
 
   return (
     <div className="h-full flex gap-4 p-4 bg-[#0B1120] text-white overflow-hidden">
 
+      {/* CATEGORY SIDEBAR */}
+
       <div className="w-48 bg-[#0e1628] border border-white/10 rounded-2xl overflow-hidden">
         <CategorySidebar
           categories={categories}
-          selectedCategory={selectedCategory}
+          selected={selectedCategory}
           onSelect={setSelectedCategory}
         />
       </div>
+
+      {/* PRODUCT SELECT */}
 
       <div className="flex-[1] bg-[#0e1628] border border-white/10 rounded-2xl overflow-hidden">
         <IncomingProducts
@@ -42,6 +56,8 @@ export default function IncomingGoodsPage() {
           onAdd={addToIncomingInvoice}
         />
       </div>
+
+      {/* INVOICE PANEL */}
 
       <div className="flex-[1.4] bg-[#0e1628] border border-white/10 rounded-2xl overflow-hidden">
         <InvoicePanel
