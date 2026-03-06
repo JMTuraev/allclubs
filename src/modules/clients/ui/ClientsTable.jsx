@@ -9,14 +9,16 @@ import { startSessionFn, endSessionFn } from "../../../firebase"
 import KeypadModal from "../../../components/modals/KeypadModal"
 import ActivatePackageDrawer from "../../subscriptions/ui/ActivatePackageDrawer"
 
+
 export default function ClientsTable({ clients }) {
+
   const navigate = useNavigate()
 
   const { getActiveSessionByClient } = useSessionSelectors()
 
   const {
     getActiveSubscriptionByClient,
-    getScheduledSubscriptionsByClient,
+    getScheduledSubscriptionsByClient
   } = useSubscriptionsContext()
 
   const [keyClient, setKeyClient] = useState(null)
@@ -29,7 +31,9 @@ export default function ClientsTable({ clients }) {
   return (
     <>
       <div className="bg-gray-900 border border-white/10 rounded-2xl">
+
         <table className="min-w-full divide-y divide-white/10 text-sm">
+
           <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase">
             <tr>
               <th className="px-6 py-4 text-left w-16">№</th>
@@ -41,7 +45,9 @@ export default function ClientsTable({ clients }) {
           </thead>
 
           <tbody className="divide-y divide-white/5">
+
             {clients.map((client, index) => {
+
               const activeSession =
                 getActiveSessionByClient(client.id)
 
@@ -62,9 +68,18 @@ export default function ClientsTable({ clients }) {
               let visitsTotal = 0
 
               if (hasActivePackage) {
+
                 const now = new Date()
-                const startDate = new Date(activeSub.startDate)
-                const expireDate = new Date(activeSub.endDate)
+
+                const startDate =
+                  activeSub.startDate?.toDate
+                    ? activeSub.startDate.toDate()
+                    : new Date(activeSub.startDate)
+
+                const expireDate =
+                  activeSub.endDate?.toDate
+                    ? activeSub.endDate.toDate()
+                    : new Date(activeSub.endDate)
 
                 const totalDays =
                   Math.max(
@@ -89,15 +104,18 @@ export default function ClientsTable({ clients }) {
                     100
                   )
 
-                if (activeSub.visitLimit === null) {
+                if (activeSub.visitLimit == null) {
+
                   visitPercent = daysPercent
+
                 } else {
+
                   visitsTotal =
                     activeSub.visitLimit
 
                   visitsUsed =
                     activeSub.visitLimit -
-                    activeSub.remainingVisits
+                    (activeSub.remainingVisits ?? 0)
 
                   const visitUsagePercent =
                     visitsTotal > 0
@@ -126,78 +144,124 @@ export default function ClientsTable({ clients }) {
                   key={client.id}
                   className="hover:bg-gray-800/40 transition"
                 >
+
                   <td className="px-6 py-6 text-gray-400">
                     {index + 1}
                   </td>
 
                   {/* CLIENT */}
+
                   <td className="px-6 py-6">
+
                     <div
                       className="flex items-center gap-4 cursor-pointer"
                       onClick={() =>
                         navigate(`/app/clients/${client.id}`)
                       }
                     >
-                      <img
-                        src={client.image}
-                        className="h-14 w-14 rounded-full object-cover border border-white/10"
-                        alt={client.firstName}
-                      />
+
+               <div className="h-14 w-14 rounded-full border border-white/10 overflow-hidden bg-gray-800 flex items-center justify-center">
+
+  {client.image ? (
+    <img
+      src={client.image}
+      alt={client.firstName}
+      className="h-full w-full object-cover"
+      onError={(e) => {
+        e.target.style.display = "none"
+      }}
+    />
+  ) : null}
+
+  {!client.image && (
+    <span className="text-white text-sm font-semibold">
+      {(client.firstName?.[0] || "")}
+      {(client.lastName?.[0] || "")}
+    </span>
+  )}
+
+</div>
                       <div>
+
                         <div className="text-xs text-gray-500">
                           ID: {client.id}
                         </div>
+
                         <div className="text-white font-semibold text-base">
                           {client.firstName} {client.lastName}
                         </div>
+
                         <div className="text-gray-400 text-sm">
                           {client.phone}
                         </div>
+
                       </div>
+
                     </div>
+
                   </td>
 
+
                   {/* PACKAGE + PROGRESS */}
+
                   <td className="px-6 py-6">
+
                     {hasActivePackage ? (
+
                       <>
+
                         <div className="text-white">
                           {activeSub.packageSnapshot?.name}
                         </div>
 
                         <div className="flex items-center gap-2 mt-2 text-xs">
+
                           {activeSub.visitLimit !== null && (
                             <span className="text-gray-400">
                               {visitsUsed} / {visitsTotal}
                             </span>
                           )}
+
                           <span className="text-indigo-400 ml-2">
                             {Math.round(visitPercent)}%
                           </span>
+
                         </div>
 
                         <div className="mt-2 bg-gray-800 rounded-full h-2">
+
                           <div
                             className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
                             style={{
-                              width: `${visitPercent}%`,
+                              width: `${visitPercent}%`
                             }}
                           />
+
                         </div>
+
                       </>
+
                     ) : hasScheduledPackage ? (
+
                       <div className="text-yellow-400 text-xs space-y-1">
+
                         <div>
                           {scheduledSubs[0].packageSnapshot?.name}
                         </div>
+
                         <div>
                           Starts{" "}
-                          {new Date(
-                            scheduledSubs[0].startDate
-                          ).toLocaleDateString()}
+                          {scheduledSubs[0].startDate?.toDate
+                            ? scheduledSubs[0].startDate.toDate().toLocaleDateString()
+                            : new Date(
+                                scheduledSubs[0].startDate
+                              ).toLocaleDateString()}
                         </div>
+
                       </div>
+
                     ) : (
+
                       <button
                         onClick={() =>
                           setActivateClient(client)
@@ -206,68 +270,85 @@ export default function ClientsTable({ clients }) {
                       >
                         Activate Package
                       </button>
+
                     )}
+
                   </td>
 
-                  {/* LOCKER */}
-                  <td className="px-6 py-6">
-                    {activeSession ? (
-                      <div className="space-y-2">
-                        <div className="text-emerald-400 text-sm">
-                          Locker: {activeSession.lockerCode}
-                        </div>
 
-                        <button
-                          onClick={() =>
-                            setCloseData({
-                              session: activeSession,
-                              client,
-                            })
-                          }
-                          className="px-4 py-2 text-xs bg-red-600 hover:bg-red-500 rounded-lg transition"
-                        >
-                          Close Session
-                        </button>
+                  {/* LOCKER */}
+
+                  <td className="px-6 py-6">
+
+                    {activeSession ? (
+
+                      <div className="text-emerald-400 text-sm">
+                        {activeSession.lockerCode}
                       </div>
+
+                    ) : (
+
+                      <span className="text-gray-500 text-xs">
+                        —
+                      </span>
+
+                    )}
+
+                  </td>
+
+
+                  {/* ACTIVITY */}
+
+                  <td className="px-6 py-6 text-sm">
+
+                    {activeSession ? (
+
+                      <button
+                        onClick={() =>
+                          setCloseData({
+                            session: activeSession,
+                            client
+                          })
+                        }
+                        className="text-red-400 hover:underline"
+                      >
+                        Close
+                      </button>
+
                     ) : canCheckIn ? (
+
                       <button
                         onClick={() =>
                           setKeyClient(client)
                         }
-                        className="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 rounded-lg transition"
+                        className="text-indigo-400 hover:underline"
                       >
                         Give Key
                       </button>
+
                     ) : (
-                      <span className="text-gray-500 text-xs">
-                        No active package
+
+                      <span className="text-gray-500">
+                        —
                       </span>
+
                     )}
+
                   </td>
 
-                  {/* ACTIVITY */}
-                  <td className="px-6 py-6 text-sm">
-                    {activeSession ? (
-                      <button
-                        onClick={() =>
-                          navigate(
-                            `/app/sessions?client=${client.id}`
-                          )
-                        }
-                        className="text-emerald-400 hover:underline"
-                      >
-                        View session
-                      </button>
-                    ) : (
-                      <span className="text-gray-500">—</span>
-                    )}
-                  </td>
                 </tr>
               )
+
             })}
+
           </tbody>
+
         </table>
+
       </div>
+
+
+      {/* MODALS */}
 
       {activateClient && (
         <ActivatePackageDrawer
@@ -281,70 +362,96 @@ export default function ClientsTable({ clients }) {
           mode="checkin"
           onClose={() => setKeyClient(null)}
           onConfirm={async (lockerCode) => {
+
             if (processing) return
             setProcessing(true)
 
             try {
+
               await startSessionFn({
                 gymId: GYM_ID,
                 clientId: keyClient.id,
-                lockerCode,
+                lockerCode
               })
+
               setKeyClient(null)
+
             } catch (err) {
+
               alert(err.message || "Session failed")
+
             } finally {
+
               setProcessing(false)
+
             }
+
           }}
         />
       )}
 
-      {closeData && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-[#111827] w-[400px] rounded-2xl p-6 space-y-5 border border-white/10">
-            <div className="text-lg font-semibold">
-              Confirm Session Close
-            </div>
+{closeData && (
 
-            <div className="text-sm text-gray-400">
-              Client: {closeData.client.firstName}{" "}
-              {closeData.client.lastName}
-            </div>
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
 
-            <div className="flex justify-end gap-3 pt-4">
-              <button
-                onClick={() => setCloseData(null)}
-                className="px-4 py-2 bg-gray-700 rounded-lg"
-              >
-                Cancel
-              </button>
+    <div className="bg-[#111827] w-[400px] rounded-2xl p-6 space-y-5 border border-white/10">
 
-              <button
-                onClick={async () => {
-                  if (processing) return
-                  setProcessing(true)
+      <div className="text-lg font-semibold">
+        Confirm Session Close
+      </div>
 
-                  try {
-                    await endSessionFn({
-                      gymId: GYM_ID,
-                      sessionId: closeData.session.id,
-                    })
-                    setCloseData(null)
-                  } catch (err) {
-                    alert(err.message || "Close failed")
-                  } finally {
-                    setProcessing(false)
-                  }
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"
-              >
-                Confirm Close
-              </button>
-            </div>
-          </div>  
-        </div>
-      )}
+      <div className="text-sm text-gray-400">
+        Client: {closeData.client.firstName} {closeData.client.lastName}
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+
+        <button
+          onClick={() => setCloseData(null)}
+          className="px-4 py-2 bg-gray-700 rounded-lg"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={async () => {
+
+            if (processing) return
+            setProcessing(true)
+
+            try {
+
+              await endSessionFn({
+                gymId: GYM_ID,
+                sessionId: closeData.session.id
+              })
+
+              setCloseData(null)
+
+            } catch (err) {
+
+              alert(err.message || "Close failed")
+
+            } finally {
+
+              setProcessing(false)
+
+            }
+
+          }}
+          className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg"
+        >
+          Confirm Close
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+)}
+
     </>
   )
-}
+} 

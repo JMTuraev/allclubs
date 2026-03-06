@@ -14,6 +14,8 @@ export default function ProductCard({
       ? image
       : "/images/default.png";
 
+  const stock = product?.stock ?? 0;
+
   return (
     <div
       onClick={!disabled ? onClick : undefined}
@@ -24,8 +26,10 @@ export default function ProductCard({
           : "bg-white/5 hover:bg-white/10 cursor-pointer"
       }`}
     >
+      {/* overlay (qty badge, menu etc) */}
       {overlay}
 
+      {/* IMAGE */}
       <div className="aspect-square w-full overflow-hidden">
         <img
           src={imgSrc}
@@ -37,13 +41,29 @@ export default function ProductCard({
         />
       </div>
 
-      <div className="p-4">
-        <div className="text-sm font-medium">
+      {/* INFO */}
+      <div className="p-4 relative">
+
+        {/* NAME */}
+        <div className="text-sm font-medium truncate">
           {product.name}
         </div>
 
+        {/* PRICE */}
         <div className="text-xs text-gray-400 mt-1">
           {(product.price || 0).toLocaleString()} so'm
+        </div>
+
+        {/* STOCK BADGE */}
+        <div
+          className={`absolute bottom-3 right-3 text-[11px] px-2 py-[2px] rounded-md font-semibold
+          ${
+            stock > 0
+              ? "bg-emerald-500/20 text-emerald-400"
+              : "bg-red-500/20 text-red-400"
+          }`}
+        >
+          {stock}
         </div>
 
         {footer}

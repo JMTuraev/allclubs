@@ -1,155 +1,151 @@
-// src/firebase.js
+/* ===============================
+src/firebase.js
+=============================== */
 
 import { initializeApp } from "firebase/app";
+
 import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged
+getAuth,
+signInAnonymously,
+onAuthStateChanged
 } from "firebase/auth";
 
 import { getFirestore } from "firebase/firestore";
 
-import { getFunctions, httpsCallable } from "firebase/functions";
+import {
+getFunctions,
+httpsCallable
+} from "firebase/functions";
 
 import { getStorage } from "firebase/storage";
 
 /* ===============================
-   Firebase Config
+Firebase Config
 =============================== */
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAUJByhmFIvF6mjonwhr9fDEnwebPagFQ4",
-  authDomain: "allclubs.firebaseapp.com",
-  projectId: "allclubs",
-    storageBucket: "allclubs.firebasestorage.app", // 🔧 shu yer
-  messagingSenderId: "1047960307680",
-  appId: "1:1047960307680:web:12a1352000a4d1992d0d85",
-  measurementId: "G-89YHC2S4DT"
+apiKey: "AIzaSyAUJByhmFIvF6mjonwhr9fDEnwebPagFQ4",
+authDomain: "allclubs.firebaseapp.com",
+projectId: "allclubs",
+storageBucket: "allclubs.firebasestorage.app",
+messagingSenderId: "1047960307680",
+appId: "1:1047960307680:web:12a1352000a4d1992d0d85",
+measurementId: "G-89YHC2S4DT"
 };
 
 /* ===============================
-   Initialize App
+Initialize App
 =============================== */
 
 const app = initializeApp(firebaseConfig);
 
 /* ===============================
-   Core Services
+Core Services
 =============================== */
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
+/* ===============================
+Cloud Functions
+=============================== */
+
 const functions = getFunctions(app, "asia-south1");
 
 /* ===============================
-   Anonymous DEV Login
+Callable Helper
+(returns res.data automatically)
 =============================== */
 
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    try {
-      const cred = await signInAnonymously(auth);
-      console.log("Anonymous login success:", cred.user.uid);
-    } catch (err) {
-      console.error("Anonymous login error:", err);
-    }
-  } else {
-    console.log("User already logged in:", user.uid);
-  }
-});
+const call = (name) => {
+const fn = httpsCallable(functions, name);
+
+return async (data) => {
+const res = await fn(data);
+return res.data;
+};
+};
 
 /* ===============================
-   Callable Cloud Functions
+Anonymous DEV Login Only
 =============================== */
 
-export const createSubscriptionFn = httpsCallable(
-  functions,
-  "createSubscription"
-);
+if (import.meta.env.DEV) {
+onAuthStateChanged(auth, async (user) => {
+if (!user) {
+try {
+const cred = await signInAnonymously(auth);
+console.log("Anonymous DEV login:", cred.user.uid);
+} catch (err) {
+console.error("Anonymous login error:", err);
+}
+}
+});
+}
 
-export const updateSubscriptionFn = httpsCallable(
-  functions,
-  "updateSubscription"
-);
+/* ===============================
+Callable Cloud Functions
+=============================== */
 
-export const updateSubscriptionStartDateFn = httpsCallable(
-  functions,
-  "updateSubscriptionStartDate"
-);
+export const createSubscriptionFn =
+call("createSubscription");
 
-export const replaceSubscriptionFn = httpsCallable(
-  functions,
-  "replaceSubscription"
-);
+export const updateSubscriptionFn =
+call("updateSubscription");
 
-export const openDayFn = httpsCallable(
-  functions,
-  "openDay"
-);
+export const updateSubscriptionStartDateFn =
+call("updateSubscriptionStartDate");
 
-export const startSessionFn = httpsCallable(
-  functions,
-  "startSession"
-);
+export const replaceSubscriptionFn =
+call("replaceSubscription");
 
-export const endSessionFn = httpsCallable(
-  functions,
-  "endSession"
-);
+export const openDayFn =
+call("openDay");
 
-export const createClientFn = httpsCallable(
-  functions,
-  "createClient"
-);
+export const startSessionFn =
+call("startSession");
 
-export const getOrCreateOpenBarCheckFn = httpsCallable(
-  functions,
-  "getOrCreateOpenBarCheck"
-);
+export const endSessionFn =
+call("endSession");
 
-export const addItemToBarCheckFn = httpsCallable(
-  functions,
-  "addItemToBarCheck"
-);
+export const createClientFn =
+call("createClient");
 
-export const decreaseItemFromBarCheckFn = httpsCallable(
-  functions,
-  "decreaseItemFromBarCheck"
-);
+export const getOrCreateOpenBarCheckFn =
+call("getOrCreateOpenBarCheck");
 
-export const createBarCategoryFn = httpsCallable(
-  functions,
-  "createBarCategory"
-);
+export const addItemToBarCheckFn =
+call("addItemToBarCheck");
 
-export const updateBarCategoryFn = httpsCallable(
-  functions,
-  "updateBarCategory"
-);
+export const decreaseItemFromBarCheckFn =
+call("decreaseItemFromBarCheck");
 
-export const deleteBarCategoryFn = httpsCallable(
-  functions,
-  "deleteBarCategory"
-);
+export const createBarCategoryFn =
+call("createBarCategory");
 
-export const createBarProductFn = httpsCallable(
-  functions,
-  "createBarProduct"
-);
+export const updateBarCategoryFn =
+call("updateBarCategory");
 
-export const updateBarProductFn = httpsCallable(
-  functions,
-  "updateBarProduct"
-);
+export const deleteBarCategoryFn =
+call("deleteBarCategory");
 
-export const deleteBarProductFn = httpsCallable(
-  functions,
-  "deleteBarProduct"
-);
+export const createBarProductFn =
+call("createBarProduct");
 
-export const createBarIncomingFn = httpsCallable(
+export const updateBarProductFn =
+call("updateBarProduct");
+
+export const deleteBarProductFn =
+call("deleteBarProduct");
+
+export const createBarIncomingFn =
+call("createBarIncoming");
+
+export const deleteBarIncomingFn =
+call("deleteBarIncoming");
+
+export const addItemToCheckFastFn = httpsCallable(
   functions,
-  "createBarIncoming"
+  "addItemToCheckFast"
 );

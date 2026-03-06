@@ -1,4 +1,8 @@
-export default function ActiveClients({ clients, selectedClient, onSelect }) {
+export default function ActiveClients({
+  clients = [],
+  selectedClient,
+  onSelect
+}) {
   return (
     <div className="flex flex-col h-full">
 

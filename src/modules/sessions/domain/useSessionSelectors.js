@@ -2,39 +2,114 @@ import { useMemo } from "react"
 import { useSessionsContext } from "./SessionsContext"
 
 export function useSessionSelectors() {
+
   const { sessions } = useSessionsContext()
 
+  /* ===============================
+  SAFE SESSIONS
+  =============================== */
+
+  const safeSessions = sessions || []
+
+  /* ===============================
+  ACTIVE / CLOSED LISTS
+  =============================== */
+
   const activeSessions = useMemo(
-    () => sessions.filter(s => s.status === "active"),
-    [sessions]
+    () => safeSessions.filter((s) => s.status === "active"),
+    [safeSessions]
   )
 
   const closedSessions = useMemo(
-    () => sessions.filter(s => s.status === "closed"),
-    [sessions]
+    () => safeSessions.filter((s) => s.status === "closed"),
+    [safeSessions]
   )
 
+  /* ===============================
+  INDEXES (FAST LOOKUPS)
+  =============================== */
+
+  const sessionsByClient = useMemo(() => {
+
+    const map = new Map()
+
+    safeSessions.forEach((s) => {
+
+      if (!map.has(s.clientId)) {
+        map.set(s.clientId, [])
+      }
+
+      map.get(s.clientId).push(s)
+
+    })
+
+    return map
+
+  }, [safeSessions])
+
+  const activeSessionByClient = useMemo(() => {
+
+    const map = new Map()
+
+    activeSessions.forEach((s) => {
+      map.set(s.clientId, s)
+    })
+
+    return map
+
+  }, [activeSessions])
+
+  const closedSessionsByClient = useMemo(() => {
+
+    const map = new Map()
+
+    closedSessions.forEach((s) => {
+
+      if (!map.has(s.clientId)) {
+        map.set(s.clientId, [])
+      }
+
+      map.get(s.clientId).push(s)
+
+    })
+
+    return map
+
+  }, [closedSessions])
+
+  /* ===============================
+  SELECTORS
+  =============================== */
+
   const getSessionsByClient = (clientId) =>
-    sessions.filter(s => s.clientId === clientId)
+    sessionsByClient.get(clientId) || []
 
   const getActiveSessionByClient = (clientId) =>
-    activeSessions.find(s => s.clientId === clientId)
+    activeSessionByClient.get(clientId) || null
 
   const getClosedSessionsByClient = (clientId) =>
-    closedSessions.filter(s => s.clientId === clientId)
+    closedSessionsByClient.get(clientId) || []
 
   const getTotalByClient = (clientId) =>
-    getSessionsByClient(clientId)
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0)
+    (sessionsByClient.get(clientId) || []).reduce(
+      (sum, s) => sum + (s.totalAmount || 0),
+      0
+    )
 
   const getUnpaidSessionsByClient = (clientId) =>
-    closedSessions.filter(
-      s => s.clientId === clientId && !s.paid
+    (closedSessionsByClient.get(clientId) || []).filter(
+      (s) => !s.paid
     )
 
   const getUnpaidTotalByClient = (clientId) =>
-    getUnpaidSessionsByClient(clientId)
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0)
+    getUnpaidSessionsByClient(clientId).reduce(
+      (sum, s) => sum + (s.totalAmount || 0),
+      0
+    )
+
+  /* ===============================
+  GLOBAL STATS
+  =============================== */
 
   const totalActiveCount = activeSessions.length
   const totalClosedCount = closedSessions.length
@@ -57,6 +132,7 @@ export function useSessionSelectors() {
     getUnpaidTotalByClient,
     totalActiveCount,
     totalClosedCount,
-    totalRevenue,
+    totalRevenue
   }
+
 }

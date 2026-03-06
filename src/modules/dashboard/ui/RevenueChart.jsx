@@ -5,7 +5,7 @@ export default function RevenueChart({
   data = [],
   onPointClick,
   title = "Revenue",
-  height = 350,
+  height = 250,
 }) {
   /* ================= CLEAN DATA ================= */
 

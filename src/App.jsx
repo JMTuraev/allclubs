@@ -43,7 +43,7 @@ import NewProductPage from "./pages/bar/NewProductPage"
 import IncomingGoodsPage from "./pages/bar/IncomingGoodsPage"
 import IncomingHistoryPage from "./pages/bar/IncomingHistoryPage"
 import MenuPage from "./pages/bar/MenuPage"
-
+import BarStatisticsPage from "./pages/bar/BarStatisticsPage"
 /* ================= FINANCE ================= */
 import FinancePage from "./pages/finance/FinancePage"
 
@@ -118,16 +118,29 @@ export default function App() {
                       </Route>
 
                       {/* ================= BAR MODULE ================= */}
-                      <Route path="/bar/*" element={<BarLayout />}>
-                        <Route
-                          index
-                          element={<Navigate to="incoming" replace />}
-                        />
-                        <Route path="incoming" element={<IncomingGoodsPage />} />
-                        <Route path="incoming/history" element={<IncomingHistoryPage />} />
-                        <Route path="new" element={<NewProductPage />} />
-                        <Route path="pos" element={<MenuPage />} />
-                      </Route>
+                {/* ================= BAR MODULE ================= */}
+
+<Route path="/bar/*" element={<BarLayout />}>
+
+  <Route
+    index
+    element={<Navigate to="incoming" replace />}
+  />
+
+  {/* PRODUCTS */}
+  <Route path="new" element={<NewProductPage />} />
+
+  {/* INCOMING */}
+  <Route path="incoming" element={<IncomingGoodsPage />} />
+  <Route path="incoming/history" element={<IncomingHistoryPage />} />
+
+  {/* POS */}
+  <Route path="pos" element={<MenuPage />} />
+
+  {/* STATISTICS */}
+  <Route path="statistics" element={<BarStatisticsPage />} />
+
+</Route>
 
                       {/* ================= 404 ================= */}
                       <Route

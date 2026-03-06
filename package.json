@@ -18,6 +18,7 @@
     "react-apexcharts": "^2.0.1",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0",
+    "react-window": "^1.8.7",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

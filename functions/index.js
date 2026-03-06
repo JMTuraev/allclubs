@@ -5,6 +5,98 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
 
+
+async function ensureOpenDay(db, gymId) {
+
+  const today = new Date().toISOString().slice(0,10)
+
+  const gymRef = db.doc(`gyms/${gymId}`)
+  const daysRef = db.collection(`gyms/${gymId}/days`)
+  const todayRef = daysRef.doc(today)
+
+  const todaySnap = await todayRef.get()
+
+  /* ================= TODAY EXISTS ================= */
+
+  if (todaySnap.exists) {
+
+    await gymRef.update({
+      currentOpenDayId: today,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    })
+
+    return todayRef
+  }
+
+  /* ================= CLOSE OLD DAY ================= */
+
+  const openSnap = await daysRef
+    .where("status","==","open")
+    .limit(1)
+    .get()
+
+  if (!openSnap.empty) {
+
+    const oldRef = openSnap.docs[0].ref
+
+    await oldRef.update({
+      status: "closed",
+      closedAt: admin.firestore.FieldValue.serverTimestamp()
+    })
+
+  }
+
+  /* ================= CREATE TODAY ================= */
+
+  await todayRef.set({
+
+    date: today,
+    status: "open",
+    openedAt: admin.firestore.FieldValue.serverTimestamp(),
+    sessionsCount: 0,
+    totalMinutes: 0
+
+  })
+
+  /* ================= UPDATE POINTER ================= */
+
+  await gymRef.update({
+
+    currentOpenDayId: today,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+
+  })
+
+  return todayRef
+}
+/* ================= GYM ACCESS HELPER ================= */
+
+async function requireGymUser(tx, gymId, uid) {
+
+  const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
+  const userSnap = await tx.get(userRef);
+
+console.log("USER PATH:", `gyms/${gymId}/users/${uid}`);
+console.log("USER EXISTS:", userSnap.exists);
+  if (!userSnap.exists) {
+    throw new HttpsError(
+      "permission-denied",
+      "User not in gym 101"
+    );
+  }
+
+  const role = userSnap.data().role;
+
+  if (!["owner", "staff"].includes(role)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Invalid role"
+    );
+  }
+
+  return role;
+}
+
 /**
  * Global production-safe settings
  */
@@ -67,32 +159,48 @@ exports.updateSubscription = onCall(async (request) => {
 
     /* ========= USER CHECK ========= */
 
-    const userSnap = await tx.get(userRef);
-    if (!userSnap.exists) {
-      throw new HttpsError("permission-denied", "User not in gym");
-    }
 
-    const role = userSnap.data().role;
-    if (!["owner", "staff"].includes(role)) {
-      throw new HttpsError("permission-denied", "Invalid role");
-    }
+const gymRef = db.doc(`gyms/${gymId}`);
+const gymSnap = await tx.get(gymRef);
 
-    /* ========= SUB CHECK ========= */
+if (!gymSnap.exists) {
+  throw new HttpsError("not-found", "Gym not found");
+}
 
-    const subSnap = await tx.get(subRef);
-    if (!subSnap.exists) {
-      throw new HttpsError("not-found", "Subscription not found");
-    }
+let role = null;
 
-    const sub = subSnap.data();
+// owner check
+if (gymSnap.data().ownerId === uid) {
+  role = "owner";
+} else {
+  const userSnap = await tx.get(userRef);
 
-    if (role === "staff" && (sub.sessionsCount || 0) > 0) {
-      throw new HttpsError(
-        "failed-precondition",
-        "Cannot edit after session started"
-      );
-    }
+  if (!userSnap.exists) {
+    throw new HttpsError("permission-denied", "User not in gym 102");
+  }
 
+  role = userSnap.data().role;
+}
+
+if (!["owner", "staff"].includes(role)) {
+  throw new HttpsError("permission-denied", "Invalid role");
+}
+
+/* ========= SUB CHECK ========= */
+
+const subSnap = await tx.get(subRef);
+if (!subSnap.exists) {
+  throw new HttpsError("not-found", "Subscription not found");
+}
+
+const sub = subSnap.data();
+
+if (role === "staff" && (sub.sessionsCount || 0) > 0) {
+  throw new HttpsError(
+    "failed-precondition",
+    "Cannot edit after session started"
+  );
+}
     /* ========= DATE VALIDATION ========= */
 
     if (safeUpdates.startDate && safeUpdates.endDate) {
@@ -151,6 +259,7 @@ exports.updateSubscription = onCall(async (request) => {
   });
 });
 exports.openDay = onCall(async (request) => {
+
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
   }
@@ -162,42 +271,76 @@ exports.openDay = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Missing gymId");
   }
 
+  const gymRef = db.doc(`gyms/${gymId}`);
   const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
   const daysRef = db.collection(`gyms/${gymId}/days`);
+  const statsRef = db.collection(`gyms/${gymId}/dailyStats`);
 
   return db.runTransaction(async (tx) => {
+
     const userSnap = await tx.get(userRef);
+
     if (!userSnap.exists || userSnap.data().role !== "owner") {
       throw new HttpsError("permission-denied", "Only owner can open day");
     }
 
-    const openQuery = daysRef.where("status", "==", "open").limit(1);
-    const openSnap = await tx.get(openQuery);
+    const gymSnap = await tx.get(gymRef);
 
-    if (!openSnap.empty) {
-      throw new HttpsError("failed-precondition", "Day already open");
+    if (gymSnap.data().currentOpenDayId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Day already open"
+      );
     }
 
     const today = new Date().toISOString().split("T")[0];
+
     const dayRef = daysRef.doc(today);
+    const statRef = statsRef.doc(today);
+
+    /* DAY */
 
     tx.set(dayRef, {
       date: today,
       status: "open",
       openedAt: admin.firestore.FieldValue.serverTimestamp(),
-      closedAt: null,
-      totals: {
-        serviceRevenue: 0,
-        paymentRevenue: 0,
-        paymentMethods: {}
+      closedAt: null
+    });
+
+    /* DAILY STATS */
+
+    tx.set(statRef, {
+
+      sessionsCount: 0,
+      totalMinutes: 0,
+
+      barRevenue: 0,
+      packageRevenue: 0,
+
+      checkCount: 0,
+
+      payments: {
+        cash: 0,
+        card: 0,
+        transfer: 0
       }
+
+    });
+
+    /* POINTER */
+
+    tx.update(gymRef, {
+      currentOpenDayId: today,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
     return { success: true };
-  });
-});
 
+  });
+
+});
 exports.createSubscription = onCall(async (request) => {
+
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
   }
@@ -207,9 +350,7 @@ exports.createSubscription = onCall(async (request) => {
     clientId,
     packageId,
     startDate,
-    amounts,
-    comment,
-    replaceId
+    amounts
   } = request.data;
 
   const uid = request.auth.uid;
@@ -225,48 +366,20 @@ exports.createSubscription = onCall(async (request) => {
   const txCol = db.collection(`gyms/${gymId}/transactions`);
   const daysRef = db.collection(`gyms/${gymId}/days`);
 
-  /* ================= PRELOAD OLD TRANSACTIONS (OUTSIDE TX) ================= */
-
-  let oldTransactions = [];
-
-  if (replaceId) {
-    const snap = await txCol
-      .where("sourceId", "==", replaceId)
-      .get();
-
-    oldTransactions = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
-  }
-
   return db.runTransaction(async (tx) => {
 
-    /* USER */
+    /* USER CHECK */
+
     const userSnap = await tx.get(userRef);
+
     if (!userSnap.exists) {
       throw new HttpsError("permission-denied", "User not in gym");
     }
 
-    /* ACTIVE DAY */
-    const openSnap = await tx.get(
-      daysRef.where("status", "==", "open").limit(1)
-    );
-
-    if (openSnap.empty) {
-      throw new HttpsError("failed-precondition", "No active day open");
-    }
-
-    const dayDoc = openSnap.docs[0];
-    const dayRef = dayDoc.ref;
-    const totals = dayDoc.data().totals || {};
-
-    let serviceRevenue = totals.serviceRevenue || 0;
-    let paymentRevenue = totals.paymentRevenue || 0;
-    let paymentMethods = { ...(totals.paymentMethods || {}) };
-
     /* CLIENT */
+
     const clientSnap = await tx.get(clientRef);
+
     if (!clientSnap.exists) {
       throw new HttpsError("not-found", "Client not found");
     }
@@ -274,105 +387,64 @@ exports.createSubscription = onCall(async (request) => {
     const client = clientSnap.data();
 
     /* PACKAGE */
+
     const packageSnap = await tx.get(packageRef);
+
     if (!packageSnap.exists) {
       throw new HttpsError("not-found", "Package not found");
     }
 
     const pkg = packageSnap.data();
+
     const price = Number(pkg.price || 0);
 
-    const paid = Object.values(amounts)
-      .reduce((sum, v) => sum + Number(v || 0), 0);
-
-    if (Math.abs(paid - price) > 0.01) {
-      throw new HttpsError("invalid-argument", "Payment mismatch");
-    }
+    /* DATE */
 
     const start = new Date(startDate || new Date());
-    const duration = Number(pkg.duration || 0) + Number(pkg.bonusDays || 0);
+
+    const duration =
+      Number(pkg.duration || 0) +
+      Number(pkg.bonusDays || 0);
+
     const end = new Date(start);
+
     end.setDate(end.getDate() + duration - 1);
     end.setHours(23, 59, 59, 999);
 
-    /* ================= REPLACE SAFE ================= */
-
-    if (replaceId) {
-
-      const oldSubRef = db.doc(
-        `gyms/${gymId}/subscriptions/${replaceId}`
-      );
-
-      const oldSubSnap = await tx.get(oldSubRef);
-      if (!oldSubSnap.exists) {
-        throw new HttpsError("not-found", "Old subscription not found");
-      }
-
-      tx.update(oldSubRef, {
-        status: "replaced",
-        replaceComment: comment || null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      for (const oldTx of oldTransactions) {
-
-        const oldTxRef = txCol.doc(oldTx.id);
-
-        tx.update(oldTxRef, {
-          status: "replaced",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        tx.set(txCol.doc(), {
-          type: oldTx.type,
-          category: oldTx.category || null,
-          clientId: oldTx.clientId,
-          paymentMethod: oldTx.paymentMethod || null,
-          amount: -Math.abs(Number(oldTx.amount || 0)),
-          source: oldTx.source,
-          sourceId: replaceId,
-          status: "active",
-          meta: {
-            reversal: true,
-            reversedTransactionId: oldTx.id
-          },
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        if (oldTx.type === "service") {
-          serviceRevenue -= Number(oldTx.amount || 0);
-        }
-
-        if (oldTx.type === "payment") {
-          paymentRevenue -= Number(oldTx.amount || 0);
-
-          if (oldTx.paymentMethod) {
-            paymentMethods[oldTx.paymentMethod] =
-              (paymentMethods[oldTx.paymentMethod] || 0) -
-              Number(oldTx.amount || 0);
-          }
-        }
-      }
-    }
-
-    /* ================= CREATE NEW ================= */
+    /* CREATE SUBSCRIPTION */
 
     tx.set(subRef, {
+
       clientId,
       clientName: `${client.firstName} ${client.lastName}`,
       clientPhone: client.phone,
+
       packageId,
       packageSnapshot: pkg,
       price,
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
+
+      startDate: admin.firestore.Timestamp.fromDate(start),
+      endDate: admin.firestore.Timestamp.fromDate(end),
+
       remainingVisits: pkg.visitLimit ?? null,
       visitLimit: pkg.visitLimit ?? null,
+
       sessionsCount: 0,
-      status: "scheduled",
+      status: "active",
+
       createdBy: uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
+
     });
+
+    /* UPDATE CLIENT POINTER */
+
+    tx.update(clientRef, {
+      activeSubscriptionId: subRef.id,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    /* SERVICE TRANSACTION */
 
     tx.set(txCol.doc(), {
       type: "service",
@@ -385,39 +457,15 @@ exports.createSubscription = onCall(async (request) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    serviceRevenue += price;
+    return {
+      success: true,
+      subscriptionId: subRef.id
+    };
 
-    for (const [method, amount] of Object.entries(amounts)) {
-      if (Number(amount) > 0) {
-
-        tx.set(txCol.doc(), {
-          type: "payment",
-          category: "package",
-          clientId,
-          paymentMethod: method,
-          amount: Number(amount),
-          source: "subscription",
-          sourceId: subRef.id,
-          status: "active",
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        paymentRevenue += Number(amount);
-        paymentMethods[method] =
-          (paymentMethods[method] || 0) + Number(amount);
-      }
-    }
-
-    tx.update(dayRef, {
-      "totals.serviceRevenue": serviceRevenue,
-      "totals.paymentRevenue": paymentRevenue,
-      "totals.paymentMethods": paymentMethods,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    return { success: true, subscriptionId: subRef.id };
   });
+
 });
+
 exports.updateSubscriptionStartDate = onCall(async (request) => {
 
   if (!request.auth) {
@@ -524,92 +572,92 @@ exports.updateSubscriptionStartDate = onCall(async (request) => {
   });
 });
 
+
 exports.startSession = onCall(async (request) => {
+
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
   }
 
-  const { gymId, clientId, lockerCode } = request.data;
+  const { gymId, clientId, lockerCode } = request.data || {};
   const uid = request.auth.uid;
 
   if (!gymId || !clientId || !lockerCode) {
     throw new HttpsError("invalid-argument", "Missing parameters");
   }
 
+  const locker = String(lockerCode);
+
   const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
-  const subsRef = db.collection(`gyms/${gymId}/subscriptions`);
+  const clientRef = db.doc(`gyms/${gymId}/clients/${clientId}`);
   const sessionsRef = db.collection(`gyms/${gymId}/sessions`);
-  const daysRef = db.collection(`gyms/${gymId}/days`);
+  const subsRef = db.collection(`gyms/${gymId}/subscriptions`);
+
+  /* AUTO DAY SYSTEM */
+
+  await ensureOpenDay(db, gymId);
 
   return db.runTransaction(async (tx) => {
 
-    /* ================= 1️⃣ USER CHECK ================= */
+    /* USER CHECK */
 
     const userSnap = await tx.get(userRef);
+
     if (!userSnap.exists) {
       throw new HttpsError("permission-denied", "User not in gym");
     }
 
-    const userData = userSnap.data();
-    if (!["owner", "staff"].includes(userData.role)) {
-      throw new HttpsError("permission-denied", "Insufficient role");
+    const role = userSnap.data().role;
+
+    if (!["owner", "staff"].includes(role)) {
+      throw new HttpsError("permission-denied", "Invalid role");
     }
 
-    /* ================= 2️⃣ DAY OPEN CHECK ================= */
+    /* CLIENT */
 
-    const openDaySnap = await tx.get(
-      daysRef.where("status", "==", "open").limit(1)
-    );
+    const clientSnap = await tx.get(clientRef);
 
-    if (openDaySnap.empty) {
+    if (!clientSnap.exists) {
+      throw new HttpsError("not-found", "Client not found");
+    }
+
+    const client = clientSnap.data();
+
+    /* ACTIVE SESSION CHECK */
+
+    if (client.activeSessionId) {
       throw new HttpsError(
-        "failed-precondition",
-        "Day is closed"
+        "already-exists",
+        "Client already in gym"
       );
     }
 
-    /* ================= 3️⃣ ACTIVE SUBSCRIPTION CHECK ================= */
+    /* SUBSCRIPTION */
 
-    const subsSnap = await tx.get(
-      subsRef.where("clientId", "==", clientId)
-    );
-
-    const now = admin.firestore.Timestamp.now().toDate();
-
-    let activeSubDoc = null;
-
-    subsSnap.docs.forEach(doc => {
-      const sub = doc.data();
-
-      if (!sub.startDate || !sub.endDate) return;
-
-      const start = new Date(sub.startDate);
-      const end = new Date(sub.endDate);
-
-      const withinDateRange =
-        now >= start && now <= end;
-
-      const notCancelled =
-        sub.status !== "cancelled" &&
-        sub.status !== "replaced";
-
-      if (withinDateRange && notCancelled) {
-        activeSubDoc = { id: doc.id, ...sub };
-      }
-    });
-
-    if (!activeSubDoc) {
+    if (!client.activeSubscriptionId) {
       throw new HttpsError(
         "failed-precondition",
         "No active subscription"
       );
     }
 
-    /* ================= 4️⃣ VISIT LIMIT CHECK ================= */
+    const subRef = subsRef.doc(client.activeSubscriptionId);
+    const subSnap = await tx.get(subRef);
+
+    if (!subSnap.exists) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Subscription not found"
+      );
+    }
+
+    const sub = subSnap.data();
+
+    /* VISIT LIMIT */
 
     if (
-      activeSubDoc.visitLimit !== null &&
-      activeSubDoc.remainingVisits <= 0
+      sub.visitLimit != null &&
+      sub.remainingVisits <= 0
     ) {
       throw new HttpsError(
         "failed-precondition",
@@ -617,78 +665,58 @@ exports.startSession = onCall(async (request) => {
       );
     }
 
-    /* ================= 5️⃣ ACTIVE SESSION PROTECTION ================= */
-
-    const activeSessionSnap = await tx.get(
-      sessionsRef
-        .where("clientId", "==", clientId)
-        .where("status", "==", "active")
-        .limit(1)
-    );
-
-    if (!activeSessionSnap.empty) {
-      throw new HttpsError(
-        "already-exists",
-        "Client already has active session"
-      );
-    }
-
-    /* ================= 6️⃣ LOCKER PROTECTION ================= */
-
-    const lockerSnap = await tx.get(
-      sessionsRef
-        .where("lockerCode", "==", lockerCode)
-        .where("status", "==", "active")
-        .limit(1)
-    );
-
-    if (!lockerSnap.empty) {
-      throw new HttpsError(
-        "already-exists",
-        "Locker already in use"
-      );
-    }
-
-    /* ================= 7️⃣ UPDATE SUBSCRIPTION ================= */
-
-    const subRef = subsRef.doc(activeSubDoc.id);
-
-    const subUpdate = {
-      sessionsCount: admin.firestore.FieldValue.increment(1),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    if (activeSubDoc.visitLimit !== null) {
-      subUpdate.remainingVisits =
-        admin.firestore.FieldValue.increment(-1);
-    }
-
-    tx.update(subRef, subUpdate);
-
-    /* ================= 8️⃣ CREATE SESSION ================= */
+    /* CREATE SESSION */
 
     const sessionRef = sessionsRef.doc();
 
     tx.set(sessionRef, {
+
       clientId,
-      subscriptionId: activeSubDoc.id,
-      lockerCode,
+      subscriptionId: client.activeSubscriptionId,
+
+      lockerCode: locker,
 
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
       endedAt: null,
 
       status: "active",
+
       totalAmount: 0,
       transactions: [],
 
       createdBy: uid,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+
     });
 
+    /* UPDATE CLIENT POINTER */
+
+    tx.update(clientRef, {
+      activeSessionId: sessionRef.id,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    /* UPDATE SUBSCRIPTION */
+
+    const updateData = {
+      sessionsCount: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (sub.visitLimit != null) {
+      updateData.remainingVisits =
+        admin.firestore.FieldValue.increment(-1);
+    }
+
+    tx.update(subRef, updateData);
+
     return { success: true };
+
   });
+
 });
+
 
 exports.endSession = onCall(async (request) => {
 
@@ -705,25 +733,32 @@ exports.endSession = onCall(async (request) => {
 
   const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
   const sessionRef = db.doc(`gyms/${gymId}/sessions/${sessionId}`);
-  const daysRef = db.collection(`gyms/${gymId}/days`);
+  const gymRef = db.doc(`gyms/${gymId}`);
+
+  /* ================= AUTO DAY ================= */
+
+  await ensureOpenDay(db, gymId);
 
   return db.runTransaction(async (tx) => {
 
-    /* ================= 1️⃣ USER + ROLE CHECK ================= */
+    /* ================= USER ================= */
 
     const userSnap = await tx.get(userRef);
+
     if (!userSnap.exists) {
       throw new HttpsError("permission-denied", "User not in gym");
     }
 
-    const userData = userSnap.data();
-    if (!["owner", "staff"].includes(userData.role)) {
-      throw new HttpsError("permission-denied", "Insufficient role");
+    const role = userSnap.data().role;
+
+    if (!["owner", "staff"].includes(role)) {
+      throw new HttpsError("permission-denied", "Invalid role");
     }
 
-    /* ================= 2️⃣ SESSION CHECK ================= */
+    /* ================= SESSION ================= */
 
     const sessionSnap = await tx.get(sessionRef);
+
     if (!sessionSnap.exists) {
       throw new HttpsError("not-found", "Session not found");
     }
@@ -744,25 +779,33 @@ exports.endSession = onCall(async (request) => {
       );
     }
 
-    /* ================= 3️⃣ OPEN DAY CHECK ================= */
+    const clientId = session.clientId;
+    const clientRef = db.doc(`gyms/${gymId}/clients/${clientId}`);
 
-    const openDaySnap = await tx.get(
-      daysRef.where("status", "==", "open").limit(1)
-    );
+    /* ================= GYM ================= */
 
-    if (openDaySnap.empty) {
+    const gymSnap = await tx.get(gymRef);
+
+    if (!gymSnap.exists) {
+      throw new HttpsError("not-found", "Gym not found");
+    }
+
+    const currentDayId = gymSnap.data().currentOpenDayId;
+
+    if (!currentDayId) {
       throw new HttpsError(
         "failed-precondition",
-        "No open day found"
+        "No open day"
       );
     }
 
-    const dayDoc = openDaySnap.docs[0];
-    const dayRef = dayDoc.ref;
+    const dayRef = db.doc(`gyms/${gymId}/days/${currentDayId}`);
+    const statsRef = db.doc(`gyms/${gymId}/dailyStats/${currentDayId}`);
 
-    /* ================= 4️⃣ DURATION CALC ================= */
+    /* ================= TIME ================= */
 
     const nowTs = admin.firestore.Timestamp.now();
+
     const startedAt = session.startedAt.toDate();
     const endedAt = nowTs.toDate();
 
@@ -771,7 +814,7 @@ exports.endSession = onCall(async (request) => {
       Math.floor((endedAt - startedAt) / 60000)
     );
 
-    /* ================= 5️⃣ UPDATE SESSION ================= */
+    /* ================= CLOSE SESSION ================= */
 
     tx.update(sessionRef, {
       status: "closed",
@@ -780,18 +823,34 @@ exports.endSession = onCall(async (request) => {
       updatedAt: nowTs
     });
 
-    /* ================= 6️⃣ UPDATE DAILY STATS (ATOMIC) ================= */
+    /* ================= RESET CLIENT ================= */
 
-    tx.update(dayRef, {
-      sessionsCount: admin.firestore.FieldValue.increment(1),
-      totalMinutes: admin.firestore.FieldValue.increment(durationMinutes),
+    tx.update(clientRef, {
+      activeSessionId: null,
       updatedAt: nowTs
     });
 
-    return { success: true };
-  });
-});
+    /* ================= UPDATE DAY ================= */
 
+    tx.set(dayRef, {
+      sessionsCount: admin.firestore.FieldValue.increment(1),
+      totalMinutes: admin.firestore.FieldValue.increment(durationMinutes),
+      updatedAt: nowTs
+    }, { merge: true });
+
+    /* ================= UPDATE DAILY STATS ================= */
+
+    tx.set(statsRef, {
+      sessionsCount: admin.firestore.FieldValue.increment(1),
+      totalMinutes: admin.firestore.FieldValue.increment(durationMinutes),
+      updatedAt: nowTs
+    }, { merge: true });
+
+    return { success: true };
+
+  });
+
+});
 
 exports.createClient = onCall(async (request) => {
   if (!request.auth) {
@@ -813,7 +872,7 @@ exports.createClient = onCall(async (request) => {
   const userSnap = await userRef.get();
 
   if (!userSnap.exists) {
-    throw new HttpsError("permission-denied", "User not in gym");
+    throw new HttpsError("permission-denied", "User not in gym 107");
   }
 
   const role = userSnap.data().role;
@@ -1014,95 +1073,83 @@ exports.getOrCreateOpenBarCheck = onCall(async (request) => {
     };
   });
 });
-
 exports.addItemToBarCheck = onCall(async (request) => {
 
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
   }
 
-  const { gymId, checkId, productId, quantity } = request.data;
+  const {
+    gymId,
+    checkId,
+    productId,
+    name,
+    price,
+    quantity
+  } = request.data;
 
-  if (!gymId || !checkId || !productId || !quantity) {
+  if (!gymId || !checkId || !productId || !price || !quantity) {
     throw new HttpsError("invalid-argument", "Missing params");
   }
 
   const checkRef = db.doc(`gyms/${gymId}/barChecks/${checkId}`);
   const productRef = db.doc(`gyms/${gymId}/barProducts/${productId}`);
 
+  const itemRef = db.collection(
+    `gyms/${gymId}/barChecks/${checkId}/items`
+  ).doc(productId);
+
   return db.runTransaction(async (tx) => {
 
-    /* 1️⃣ GET CHECK */
     const checkSnap = await tx.get(checkRef);
+
     if (!checkSnap.exists) {
       throw new HttpsError("not-found", "Check not found");
     }
 
     const check = checkSnap.data();
+
     if (check.status !== "open") {
       throw new HttpsError("failed-precondition", "Check closed");
     }
 
-    /* 2️⃣ GET PRODUCT */
-    const productSnap = await tx.get(productRef);
-    if (!productSnap.exists) {
-      throw new HttpsError("not-found", "Product not found");
+    const itemSnap = await tx.get(itemRef);
+
+    if (itemSnap.exists) {
+
+      tx.update(itemRef, {
+        qty: admin.firestore.FieldValue.increment(quantity),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+    } else {
+
+      tx.set(itemRef, {
+        productId,
+        name,
+        price,
+        qty: quantity,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
     }
 
-    const product = productSnap.data();
+    tx.update(checkRef, {
+      total: admin.firestore.FieldValue.increment(price * quantity),
+      debtAmount: admin.firestore.FieldValue.increment(price * quantity),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
-    if ((product.stock || 0) < quantity) {
-      throw new HttpsError("failed-precondition", "Not enough stock");
-    }
-
-    /* 3️⃣ UPDATE STOCK */
     tx.update(productRef, {
       stock: admin.firestore.FieldValue.increment(-quantity),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    /* 4️⃣ UPDATE CHECK ITEMS */
-
-    const existingItem = check.items.find(
-      i => i.productId === productId
-    );
-
-    let newItems;
-
-    if (existingItem) {
-      newItems = check.items.map(i =>
-        i.productId === productId
-          ? { ...i, qty: i.qty + quantity }
-          : i
-      );
-    } else {
-      newItems = [
-        ...check.items,
-        {
-          productId,
-          name: product.name,
-          qty: quantity,
-          price: product.price
-        }
-      ];
-    }
-
-    const newTotal = newItems.reduce(
-      (sum, i) => sum + i.qty * i.price,
-      0
-    );
-
-    tx.update(checkRef, {
-      items: newItems,
-      total: newTotal,
-      debtAmount: newTotal - (check.paidAmount || 0),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
     return { success: true };
-  });
-});
 
+  });
+
+});
 exports.decreaseItemFromBarCheck = onCall(async (request) => {
 
   if (!request.auth) {
@@ -1385,9 +1432,12 @@ exports.createBarIncoming = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "items required");
   }
 
-  const incomingRef = db.collection(`gyms/${gymId}/barIncoming`).doc();
+  const incomingRef =
+    db.collection(`gyms/${gymId}/barIncoming`).doc();
 
   let total = 0;
+
+  const itemsToSave = [];
 
   await db.runTransaction(async (tx) => {
 
@@ -1398,13 +1448,6 @@ exports.createBarIncoming = onCall(async (request) => {
         quantity,
         purchasePrice
       } = item;
-
-      if (!productId || !quantity || !purchasePrice) {
-        throw new HttpsError(
-          "invalid-argument",
-          "invalid item"
-        );
-      }
 
       const productRef = db.doc(
         `gyms/${gymId}/barProducts/${productId}`
@@ -1421,20 +1464,9 @@ exports.createBarIncoming = onCall(async (request) => {
 
       const product = productSnap.data();
 
-      /* 🔴 VALIDATION */
-
-      if (purchasePrice > product.price) {
-        throw new HttpsError(
-          "failed-precondition",
-          `${product.name}: purchase price cannot exceed selling price`
-        );
-      }
-
-      /* 🧮 TOTAL */
-
       total += quantity * purchasePrice;
 
-      /* 📦 UPDATE STOCK */
+      /* STOCK UPDATE */
 
       tx.update(productRef, {
         stock: (product.stock || 0) + quantity,
@@ -1442,14 +1474,21 @@ exports.createBarIncoming = onCall(async (request) => {
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-    }
+      /* 🔥 PRODUCT SNAPSHOT SAVE */
 
-    /* 💾 SAVE INVOICE */
+      itemsToSave.push({
+        productId,
+        name: product.name,
+        quantity,
+        purchasePrice
+      });
+
+    }
 
     tx.set(incomingRef, {
       invoiceNumber:
         "INC-" + Date.now().toString().slice(-6),
-      items,
+      items: itemsToSave,
       total,
       createdAt:
         admin.firestore.FieldValue.serverTimestamp()
@@ -1457,8 +1496,196 @@ exports.createBarIncoming = onCall(async (request) => {
 
   });
 
-  return {
-    id: incomingRef.id
-  };
+  return { id: incomingRef.id };
+
+});
+
+
+exports.deleteBarIncoming = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, incomingId } = request.data;
+
+  if (!gymId || !incomingId) {
+    throw new HttpsError("invalid-argument", "missing params");
+  }
+
+  const incomingRef = db.doc(`gyms/${gymId}/barIncoming/${incomingId}`);
+
+  await db.runTransaction(async (tx) => {
+
+    const incomingSnap = await tx.get(incomingRef);
+
+    if (!incomingSnap.exists) {
+      throw new HttpsError("not-found", "invoice not found");
+    }
+
+    const incoming = incomingSnap.data();
+
+    for (const item of incoming.items) {
+
+      const productRef = db.doc(
+        `gyms/${gymId}/barProducts/${item.productId}`
+      );
+
+      const productSnap = await tx.get(productRef);
+
+      if (!productSnap.exists) continue;
+
+      const product = productSnap.data();
+
+      tx.update(productRef, {
+        stock: (product.stock || 0) - item.quantity,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }); 
+
+    }
+
+    tx.delete(incomingRef);
+
+  });
+
+  return { success: true };
+
+});
+
+exports.addItemToCheckFast = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+
+  const { gymId, sessionId, clientId, productId } = request.data;
+
+  if (!gymId || !sessionId || !clientId || !productId) {
+    throw new HttpsError("invalid-argument", "Missing params");
+  }
+
+  const checksRef = db.collection(`gyms/${gymId}/barChecks`);
+  const productRef = db.doc(`gyms/${gymId}/barProducts/${productId}`);
+  const inventoryRef = db.doc(`gyms/${gymId}/barInventory/${productId}`);
+
+  return db.runTransaction(async (tx) => {
+
+    /* ================= PRODUCT ================= */
+
+    const productSnap = await tx.get(productRef);
+
+    if (!productSnap.exists) {
+      throw new HttpsError("not-found", "Product not found");
+    }
+
+    const product = productSnap.data();
+
+    /* ================= INVENTORY ================= */
+
+    const inventorySnap = await tx.get(inventoryRef);
+
+    if (!inventorySnap.exists) {
+      throw new HttpsError("failed-precondition", "Inventory missing");
+    }
+
+    const stock = inventorySnap.data().stock || 0;
+
+    if (stock <= 0) {
+      throw new HttpsError("failed-precondition", "Out of stock");
+    }
+
+    /* ================= FIND CHECK ================= */
+
+    const checkQuery = await tx.get(
+      checksRef
+        .where("sessionId", "==", sessionId)
+        .where("status", "==", "open")
+        .limit(1)
+    );
+
+    let checkRef;
+    let check;
+
+    if (checkQuery.empty) {
+
+      checkRef = checksRef.doc();
+
+      check = {
+        sessionId,
+        clientId,
+        status: "open",
+        total: 0,
+        paidAmount: 0,
+        debtAmount: 0,
+        items: [],
+        payments: [],
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      tx.set(checkRef, check);
+
+    } else {
+
+      const doc = checkQuery.docs[0];
+      checkRef = doc.ref;
+      check = doc.data();
+
+    }
+
+    /* ================= UPDATE ITEMS ================= */
+
+    const existing = check.items.find(
+      (i) => i.productId === productId
+    );
+
+    let newItems;
+
+    if (existing) {
+
+      newItems = check.items.map((i) =>
+        i.productId === productId
+          ? { ...i, qty: i.qty + 1 }
+          : i
+      );
+
+    } else {
+
+      newItems = [
+        ...check.items,
+        {
+          productId,
+          name: product.name,
+          qty: 1,
+          price: product.price
+        }
+      ];
+
+    }
+
+    const newTotal = newItems.reduce(
+      (sum, i) => sum + i.qty * i.price,
+      0
+    );
+
+    /* ================= UPDATE INVENTORY ================= */
+
+    tx.update(inventoryRef, {
+      stock: admin.firestore.FieldValue.increment(-1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    /* ================= UPDATE CHECK ================= */
+
+    tx.update(checkRef, {
+      items: newItems,
+      total: newTotal,
+      debtAmount: newTotal - (check.paidAmount || 0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success: true, checkId: checkRef.id };
+
+  });
 
 });
