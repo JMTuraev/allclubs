@@ -10,6 +10,49 @@ import {
 
 import PaymentModal from "../../../components/modals/PaymentModal"
 
+/* ============================= */
+/* DATE HELPERS                  */
+/* ============================= */
+
+function formatDateInput(value) {
+  if (!value) return ""
+
+  // Firestore Timestamp
+  if (typeof value?.toDate === "function") {
+    return value.toDate().toISOString().split("T")[0]
+  }
+
+  // JS Date
+  if (value instanceof Date) {
+    return value.toISOString().split("T")[0]
+  }
+
+  // ISO string
+  if (typeof value === "string") {
+    return value.split("T")[0]
+  }
+
+  return ""
+}
+
+function formatDisplayDate(value) {
+  if (!value) return "-"
+
+  if (typeof value?.toDate === "function") {
+    return value.toDate().toLocaleDateString()
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleDateString()
+  }
+
+  if (typeof value === "string") {
+    return new Date(value).toLocaleDateString()
+  }
+
+  return "-"
+}
+
 export default function ActivatePackageDrawer({
   client,
   editSubscription = null,
@@ -31,8 +74,9 @@ export default function ActivatePackageDrawer({
   const todayISO = new Date().toISOString().split("T")[0]
 
   const [selected, setSelected] = useState(null)
+
   const [startDate, setStartDate] = useState(
-    editSubscription?.startDate?.split("T")[0] || todayISO
+    formatDateInput(editSubscription?.startDate) || todayISO
   )
 
   const [showPayment, setShowPayment] = useState(false)
@@ -64,6 +108,7 @@ export default function ActivatePackageDrawer({
                 {client?.firstName} {client?.lastName}
               </p>
             </div>
+
             <button disabled={processing} onClick={onClose}>
               <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-white" />
             </button>
@@ -73,20 +118,20 @@ export default function ActivatePackageDrawer({
             <div className="text-sm text-gray-400">
               Current Start:
             </div>
+
             <div className="text-white text-sm">
-              {new Date(editSubscription.startDate).toLocaleDateString()}
+              {formatDisplayDate(editSubscription?.startDate)}
             </div>
 
             <div>
               <label className="text-xs text-gray-400">
                 New Start Date
               </label>
+
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) =>
-                  setStartDate(e.target.value)
-                }
+                onChange={(e) => setStartDate(e.target.value)}
                 className="mt-2 w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2 text-white"
               />
             </div>
@@ -145,6 +190,7 @@ export default function ActivatePackageDrawer({
                 {client?.firstName} {client?.lastName}
               </p>
             </div>
+
             <button disabled={processing} onClick={onClose}>
               <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-white" />
             </button>
@@ -155,12 +201,11 @@ export default function ActivatePackageDrawer({
               <label className="text-xs text-gray-400">
                 Start Date
               </label>
+
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) =>
-                  setStartDate(e.target.value)
-                }
+                onChange={(e) => setStartDate(e.target.value)}
                 className="mt-2 w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2 text-white"
               />
             </div>
@@ -193,6 +238,7 @@ export default function ActivatePackageDrawer({
                     <span className="text-sm text-white">
                       {pkg.name}
                     </span>
+
                     <span className="text-sm text-indigo-400">
                       {pkg.price.toLocaleString()} сум
                     </span>

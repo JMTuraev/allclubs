@@ -120,6 +120,7 @@ const ALLOWED_UPDATE_FIELDS = [
 ];
 
 exports.updateSubscription = onCall(async (request) => {
+
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Login required");
   }
@@ -141,6 +142,7 @@ exports.updateSubscription = onCall(async (request) => {
   ];
 
   const safeUpdates = {};
+
   for (const key of Object.keys(updates)) {
     if (ALLOWED_UPDATE_FIELDS.includes(key)) {
       safeUpdates[key] = updates[key];
@@ -151,6 +153,7 @@ exports.updateSubscription = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "No valid fields to update");
   }
 
+  const gymRef = db.doc(`gyms/${gymId}`);
   const userRef = db.doc(`gyms/${gymId}/users/${uid}`);
   const subRef = db.doc(`gyms/${gymId}/subscriptions/${subscriptionId}`);
   const transactionsRef = db.collection(`gyms/${gymId}/transactions`);
@@ -159,51 +162,52 @@ exports.updateSubscription = onCall(async (request) => {
 
     /* ========= USER CHECK ========= */
 
+    const gymSnap = await tx.get(gymRef);
 
-const gymRef = db.doc(`gyms/${gymId}`);
-const gymSnap = await tx.get(gymRef);
+    if (!gymSnap.exists) {
+      throw new HttpsError("not-found", "Gym not found");
+    }
 
-if (!gymSnap.exists) {
-  throw new HttpsError("not-found", "Gym not found");
-}
+    let role = null;
 
-let role = null;
+    if (gymSnap.data().ownerId === uid) {
+      role = "owner";
+    } else {
 
-// owner check
-if (gymSnap.data().ownerId === uid) {
-  role = "owner";
-} else {
-  const userSnap = await tx.get(userRef);
+      const userSnap = await tx.get(userRef);
 
-  if (!userSnap.exists) {
-    throw new HttpsError("permission-denied", "User not in gym 102");
-  }
+      if (!userSnap.exists) {
+        throw new HttpsError("permission-denied", "User not in gym");
+      }
 
-  role = userSnap.data().role;
-}
+      role = userSnap.data().role;
+    }
 
-if (!["owner", "staff"].includes(role)) {
-  throw new HttpsError("permission-denied", "Invalid role");
-}
+    if (!["owner", "staff"].includes(role)) {
+      throw new HttpsError("permission-denied", "Invalid role");
+    }
 
-/* ========= SUB CHECK ========= */
+    /* ========= SUB CHECK ========= */
 
-const subSnap = await tx.get(subRef);
-if (!subSnap.exists) {
-  throw new HttpsError("not-found", "Subscription not found");
-}
+    const subSnap = await tx.get(subRef);
 
-const sub = subSnap.data();
+    if (!subSnap.exists) {
+      throw new HttpsError("not-found", "Subscription not found");
+    }
 
-if (role === "staff" && (sub.sessionsCount || 0) > 0) {
-  throw new HttpsError(
-    "failed-precondition",
-    "Cannot edit after session started"
-  );
-}
+    const sub = subSnap.data();
+
+    if (role === "staff" && (sub.sessionsCount || 0) > 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Cannot edit after session started"
+      );
+    }
+
     /* ========= DATE VALIDATION ========= */
 
     if (safeUpdates.startDate && safeUpdates.endDate) {
+
       const start = new Date(safeUpdates.startDate);
       const end = new Date(safeUpdates.endDate);
 
@@ -213,6 +217,12 @@ if (role === "staff" && (sub.sessionsCount || 0) > 0) {
           "Start date cannot be after end date"
         );
       }
+
+      safeUpdates.startDate =
+        admin.firestore.Timestamp.fromDate(start);
+
+      safeUpdates.endDate =
+        admin.firestore.Timestamp.fromDate(end);
     }
 
     /* ========= PAYMENT METHOD CHANGE (LEDGER SAFE) ========= */
@@ -221,34 +231,36 @@ if (role === "staff" && (sub.sessionsCount || 0) > 0) {
       safeUpdates.paymentMethod &&
       safeUpdates.paymentMethod !== sub.paymentMethod
     ) {
-      const amount = Number(sub.price || 0);
 
-      // 1️⃣ Reverse old transaction
+      const amount =
+        Number(sub.price || sub.packageSnapshot?.price || 0);
+
+      // reverse old
       tx.create(transactionsRef.doc(), {
-        gymId,
         clientId: sub.clientId,
         subscriptionId,
         amount: -amount,
-        method: sub.paymentMethod,
+        paymentMethod: sub.paymentMethod,
         type: "method_change_reverse",
+        category: "package",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         createdBy: uid
       });
 
-      // 2️⃣ Create new transaction with new method
+      // new method
       tx.create(transactionsRef.doc(), {
-        gymId,
         clientId: sub.clientId,
         subscriptionId,
         amount: amount,
-        method: safeUpdates.paymentMethod,
+        paymentMethod: safeUpdates.paymentMethod,
         type: "method_change_repost",
+        category: "package",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         createdBy: uid
       });
     }
 
-    /* ========= FINAL SUB UPDATE ========= */
+    /* ========= FINAL UPDATE ========= */
 
     tx.update(subRef, {
       ...safeUpdates,
@@ -256,7 +268,9 @@ if (role === "staff" && (sub.sessionsCount || 0) > 0) {
     });
 
     return { success: true };
+
   });
+
 });
 exports.openDay = onCall(async (request) => {
 
@@ -339,6 +353,7 @@ exports.openDay = onCall(async (request) => {
   });
 
 });
+
 exports.createSubscription = onCall(async (request) => {
 
   if (!request.auth) {
@@ -364,7 +379,6 @@ exports.createSubscription = onCall(async (request) => {
   const clientRef = db.doc(`gyms/${gymId}/clients/${clientId}`);
   const subRef = db.collection(`gyms/${gymId}/subscriptions`).doc();
   const txCol = db.collection(`gyms/${gymId}/transactions`);
-  const daysRef = db.collection(`gyms/${gymId}/days`);
 
   return db.runTransaction(async (tx) => {
 
@@ -444,18 +458,35 @@ exports.createSubscription = onCall(async (request) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    /* SERVICE TRANSACTION */
+    /* ============================= */
+    /* PAYMENT TRANSACTIONS          */
+    /* ============================= */
 
-    tx.set(txCol.doc(), {
-      type: "service",
-      category: "package",
-      clientId,
-      amount: price,
-      source: "subscription",
-      sourceId: subRef.id,
-      status: "active",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    const entries = Object.entries(amounts)
+      .filter(([_, amount]) => Number(amount) > 0);
+
+    for (const [method, amount] of entries) {
+
+      tx.set(txCol.doc(), {
+
+        type: "service",
+        category: "package",
+
+        clientId,
+
+        paymentMethod: method,   // 🔥 METHOD ENDI YOZILADI
+        amount: Number(amount),
+
+        source: "subscription",
+        sourceId: subRef.id,
+
+        status: "active",
+
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+
+      });
+
+    }
 
     return {
       success: true,
@@ -485,8 +516,8 @@ exports.updateSubscriptionStartDate = onCall(async (request) => {
 
   return db.runTransaction(async (tx) => {
 
-    // 1️⃣ Role check
     const userSnap = await tx.get(userRef);
+
     if (!userSnap.exists) {
       throw new HttpsError("permission-denied", "User not found");
     }
@@ -497,15 +528,14 @@ exports.updateSubscriptionStartDate = onCall(async (request) => {
       throw new HttpsError("permission-denied", "Invalid role");
     }
 
-    // 2️⃣ Subscription read
     const subSnap = await tx.get(subRef);
+
     if (!subSnap.exists) {
       throw new HttpsError("not-found", "Subscription not found");
     }
 
     const sub = subSnap.data();
 
-    // 🔒 Session opened check
     if (sub.sessionOpened === true) {
       throw new HttpsError(
         "failed-precondition",
@@ -513,32 +543,24 @@ exports.updateSubscriptionStartDate = onCall(async (request) => {
       );
     }
 
-    const oldStart = new Date(sub.startDate);
-    const oldEnd = new Date(sub.endDate);
+    const oldStart = sub.startDate.toDate();
+    const oldEnd = sub.endDate.toDate();
 
     const duration =
-      Math.floor(
-        (oldEnd - oldStart) / (1000 * 60 * 60 * 24)
-      ) + 1;
+      Math.floor((oldEnd - oldStart) / (1000 * 60 * 60 * 24)) + 1;
 
     const start = new Date(newStartDate);
     const end = new Date(start);
+
     end.setDate(start.getDate() + duration - 1);
     end.setHours(23, 59, 59, 999);
 
-    if (start > end) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Invalid date range"
-      );
-    }
-
-    // 3️⃣ Overlap check (minimal read)
     const clientSubsSnap = await tx.get(
       subsRef.where("clientId", "==", sub.clientId)
     );
 
     clientSubsSnap.docs.forEach(doc => {
+
       if (doc.id === subscriptionId) return;
 
       const other = doc.data();
@@ -546,8 +568,8 @@ exports.updateSubscriptionStartDate = onCall(async (request) => {
       if (["replaced", "cancelled"].includes(other.status))
         return;
 
-      const otherStart = new Date(other.startDate);
-      const otherEnd = new Date(other.endDate);
+      const otherStart = other.startDate.toDate();
+      const otherEnd = other.endDate.toDate();
 
       const overlap =
         start <= otherEnd &&
@@ -559,20 +581,20 @@ exports.updateSubscriptionStartDate = onCall(async (request) => {
           "Subscription dates overlap"
         );
       }
+
     });
 
-    // 4️⃣ Update
     tx.update(subRef, {
-      startDate: start.toISOString(),
-      endDate: end.toISOString(),
+      startDate: admin.firestore.Timestamp.fromDate(start),
+      endDate: admin.firestore.Timestamp.fromDate(end),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
     return { success: true };
+
   });
+
 });
-
-
 exports.startSession = onCall(async (request) => {
 
   if (!request.auth) {
@@ -671,24 +693,26 @@ exports.startSession = onCall(async (request) => {
 
     tx.set(sessionRef, {
 
-      clientId,
-      subscriptionId: client.activeSubscriptionId,
+  clientId,
+  clientName: `${client.firstName} ${client.lastName}`, // POS uchun tez lookup
 
-      lockerCode: locker,
+  subscriptionId: client.activeSubscriptionId,
 
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
-      endedAt: null,
+  locker: locker, // 🔥 lockerCode o‘rniga
 
-      status: "active",
+  startedAt: admin.firestore.FieldValue.serverTimestamp(),
+  endedAt: null,
 
-      totalAmount: 0,
-      transactions: [],
+  status: "active",
 
-      createdBy: uid,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  totalAmount: 0,
+  transactions: [],
 
-    });
+  createdBy: uid,
+  createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  updatedAt: admin.firestore.FieldValue.serverTimestamp()
+
+});
 
     /* UPDATE CLIENT POINTER */
 

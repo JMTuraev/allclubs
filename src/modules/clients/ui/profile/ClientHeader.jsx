@@ -14,7 +14,7 @@ export default function ClientHeader({
   const hasSubscription = Boolean(subscription)
 
   const expiresText = hasSubscription
-    ? new Date(subscription.expiresAt).toLocaleDateString("ru-RU")
+    ? formatDate(subscription.endDate)
     : "No active package"
 
   const statusColor = !hasSubscription
@@ -25,7 +25,6 @@ export default function ClientHeader({
     ? "text-red-300"
     : "text-yellow-300"
 
-    console.log("heaeder", client, "heaeder");
   return (
     <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl px-6 py-6 flex items-center justify-between">
 
@@ -35,7 +34,7 @@ export default function ClientHeader({
         <div className="relative">
           <img
             src={client.image || "/avatar-placeholder.png"}
-            alt={client?.firstName}
+            alt={client?.firstName || "Client"}
             className="w-16 h-16 rounded-full object-cover border-2 border-white/20"
           />
 
@@ -45,9 +44,10 @@ export default function ClientHeader({
         </div>
 
         <div>
+
           <div className="flex items-center gap-2 text-lg font-semibold text-white">
             <UserIcon className="w-4 h-4" />
-            {client.name} {client.lastName}
+            {client.firstName} {client.lastName}
           </div>
 
           <div className="flex items-center gap-2 text-white/80 text-sm mt-1">
@@ -61,11 +61,13 @@ export default function ClientHeader({
               {Number(balance || 0).toLocaleString("ru-RU")} сум
             </span>
           </div>
+
         </div>
       </div>
 
       {/* RIGHT SIDE */}
       <div className="text-right text-white">
+
         <div className="flex items-center gap-2 text-xs opacity-80 justify-end">
           <CalendarDaysIcon className="w-4 h-4" />
           Expires
@@ -74,7 +76,20 @@ export default function ClientHeader({
         <div className={`text-sm font-semibold mt-1 ${statusColor}`}>
           {expiresText}
         </div>
+
       </div>
     </div>
   )
+}
+
+function formatDate(v) {
+
+  if (!v) return "-"
+
+  const d =
+    typeof v?.toDate === "function"
+      ? v.toDate()
+      : new Date(v)
+
+  return d.toLocaleDateString("ru-RU")
 }

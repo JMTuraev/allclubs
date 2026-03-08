@@ -14,7 +14,7 @@ export default function ActiveClients({
 
         {clients.map((client) => (
           <div
-            key={client.id}
+            key={`${client.id}-${client.locker || "guest"}`}
             onClick={() => onSelect(client)}
             className={`p-3 rounded-xl cursor-pointer transition ${
               selectedClient?.id === client.id
@@ -24,13 +24,17 @@ export default function ActiveClients({
                 : "bg-white/5 hover:bg-white/10"
             }`}
           >
-            <div className="text-sm font-medium">
+
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {client.id !== "guest" && (
+                <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+              )}
               {client.name}
             </div>
 
             {client.id !== "guest" && (
               <div className="text-xs text-gray-400 mt-1">
-                Locker {client.locker}
+                Locker {client.locker || "-"}
               </div>
             )}
 
@@ -39,10 +43,12 @@ export default function ActiveClients({
                 Quick Sale Mode
               </div>
             )}
+
           </div>
         ))}
 
       </div>
+
     </div>
   );
 }

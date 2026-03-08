@@ -33,6 +33,12 @@ export default function FinancePage() {
     clients
   )
 
+
+  useEffect(() => {
+  console.log(activeTransactions)
+}, [activeTransactions])
+
+
   return (
     <div className="space-y-8">
 

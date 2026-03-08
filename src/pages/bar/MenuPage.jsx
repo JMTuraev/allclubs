@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useProducts } from "../../context/ProductContext";
 import { useSessionsContext } from "../../modules/sessions/domain/SessionsContext";
+import { useClientsContext } from "../../modules/clients/domain/ClientsContext";
 
 import {
   collection,
@@ -28,6 +29,7 @@ export default function MenuPage() {
 
   const { categories, products } = useProducts();
   const { sessions } = useSessionsContext();
+  const { clients } = useClientsContext();
 
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -49,22 +51,32 @@ export default function MenuPage() {
 
   /* ================= ACTIVE CLIENTS ================= */
 
-  const activeClients = useMemo(() => {
+const activeClients = useMemo(() => {
 
-    const list = sessions
-      .filter((s) => s.status === "active")
-      .map((s) => ({
+  const list = sessions
+    .filter((s) => s.status === "active")
+    .map((s) => {
+
+      const client = clients.find(
+        (c) => String(c.id) === String(s.clientId)
+      )
+
+      return {
         id: s.clientId,
-        name: s.clientName || "Client",
+        name: client
+          ? `${client.firstName} ${client.lastName}`
+          : "Client",
         locker: s.locker || "-"
-      }));
+      }
 
-    return [
-      { id: "guest", name: "Guest" },
-      ...list
-    ];
+    })
 
-  }, [sessions]);
+  return [
+    { id: "guest", name: "Guest" },
+    ...list
+  ]
+
+}, [sessions, clients])
 
   /* ================= FILTER PRODUCTS ================= */
 
@@ -84,7 +96,7 @@ export default function MenuPage() {
 
   useEffect(() => {
 
-    if (!selectedClient) {
+    if (!selectedClient || selectedClient.id === "guest") {
       setActiveCheck(null);
       setLocalCart([]);
       return;
@@ -123,13 +135,13 @@ export default function MenuPage() {
 
   }, [selectedClient]);
 
-  /* ================= ADD PRODUCT (FAST POS) ================= */
+  /* ================= ADD PRODUCT ================= */
 
   const handleAddProduct = async (product) => {
 
-    if (!selectedClient) return;
+    if (!selectedClient || selectedClient.id === "guest") return;
 
-    /* OPTIMISTIC UI */
+    /* optimistic UI */
 
     setLocalCart((prev) => {
 
@@ -164,7 +176,8 @@ export default function MenuPage() {
       const session = sessions.find(
         (s) =>
           s.clientId === selectedClient.id &&
-          s.status === "active"
+          s.checkIn &&
+          !s.checkOut
       );
 
       if (!session) return;
@@ -189,8 +202,6 @@ export default function MenuPage() {
   const handleDecrease = async (productId) => {
 
     if (!activeCheck) return;
-
-    /* optimistic */
 
     setLocalCart((prev) => {
 
