@@ -4,7 +4,8 @@ import {
   collection,
   query,
   where,
-  onSnapshot
+  onSnapshot,
+  orderBy
 } from "firebase/firestore";
 
 import { db } from "../firebase";
@@ -31,9 +32,12 @@ export function ProductProvider({ children }) {
 
   useEffect(() => {
 
+    const ref = collection(db, "gyms", gymId, "barCategories");
+
     const q = query(
-      collection(db, `gyms/${gymId}/barCategories`),
-      where("isActive", "==", true)
+      ref,
+      where("isActive", "==", true),
+      orderBy("name")
     );
 
     const unsub = onSnapshot(q, (snap) => {
@@ -55,9 +59,12 @@ export function ProductProvider({ children }) {
 
   useEffect(() => {
 
+    const ref = collection(db, "gyms", gymId, "barProducts");
+
     const q = query(
-      collection(db, `gyms/${gymId}/barProducts`),
-      where("isActive", "==", true)
+      ref,
+      where("isActive", "==", true),
+      orderBy("name")
     );
 
     const unsub = onSnapshot(q, (snap) => {
@@ -158,6 +165,7 @@ export function ProductProvider({ children }) {
       {children}
     </ProductContext.Provider>
   );
+
 }
 
 export function useProducts() {

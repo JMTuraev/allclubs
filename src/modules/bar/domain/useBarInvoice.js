@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 export function useBarInvoice() {
   const [invoiceItems, setInvoiceItems] = useState([]);
 
-  // ADD PRODUCT
   const addToInvoice = (product) => {
     if (!product) return;
 
@@ -23,13 +22,12 @@ export function useBarInvoice() {
         {
           ...product,
           quantity: 1,
-          purchasePrice: "" // 🔥 string boshqaramiz
+          purchasePrice: ""
         }
       ];
     });
   };
 
-  // UPDATE QUANTITY
   const updateQuantity = (id, qty) => {
     setInvoiceItems(prev =>
       prev.map(item =>
@@ -40,7 +38,6 @@ export function useBarInvoice() {
     );
   };
 
-  // UPDATE PURCHASE PRICE (string saqlaymiz)
   const updatePurchasePrice = (id, value) => {
     setInvoiceItems(prev =>
       prev.map(item =>
@@ -51,19 +48,16 @@ export function useBarInvoice() {
     );
   };
 
-  // REMOVE ITEM
   const removeItem = (id) => {
     setInvoiceItems(prev =>
       prev.filter(item => item.id !== id)
     );
   };
 
-  // CLEAR
   const clearInvoice = () => {
     setInvoiceItems([]);
   };
 
-  // TOTAL (hisoblashda numberga aylantiramiz)
   const invoiceTotal = useMemo(() => {
     return invoiceItems.reduce((sum, item) => {
       const priceNumber = Number(item.purchasePrice) || 0;

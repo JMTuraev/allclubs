@@ -7,6 +7,7 @@ import { storage } from "../../firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function NewProductPage() {
+
   const {
     categories,
     products,
@@ -42,7 +43,9 @@ export default function NewProductPage() {
   /* ================= IMAGE CHANGE ================= */
 
   const handleImageChange = (e) => {
+
     const file = e.target.files[0];
+
     if (!file) return;
 
     const preview = URL.createObjectURL(file);
@@ -52,20 +55,44 @@ export default function NewProductPage() {
       image: preview,
       file
     }));
+
+  };
+
+  /* ================= RESET FORM ================= */
+
+  const resetForm = () => {
+
+    setForm({
+      name: "",
+      price: "",
+      image: "",
+      file: null
+    });
+
+    setEditingProduct(null);
+    setModalOpen(false);
+
   };
 
   /* ================= SUBMIT ================= */
 
   const handleSubmit = async () => {
 
-    if (!selectedCategory) return;
-    if (!form.name || !form.price) return;
+    if (!selectedCategory) {
+      alert("Select category first");
+      return;
+    }
+
+    if (!form.name || !form.price) {
+      alert("Fill all fields");
+      return;
+    }
 
     let imageUrl = form.image;
 
     try {
 
-      /* 🔥 Upload new file if exists */
+      /* IMAGE UPLOAD */
 
       if (form.file) {
 
@@ -77,7 +104,10 @@ export default function NewProductPage() {
         await uploadBytes(storageRef, form.file);
 
         imageUrl = await getDownloadURL(storageRef);
+
       }
+
+      /* UPDATE */
 
       if (editingProduct) {
 
@@ -87,7 +117,11 @@ export default function NewProductPage() {
           image: imageUrl
         });
 
-      } else {
+      }
+
+      /* CREATE */
+
+      else {
 
         await addProduct({
           categoryId: selectedCategory.id,
@@ -99,20 +133,16 @@ export default function NewProductPage() {
 
       }
 
-      setForm({
-        name: "",
-        price: "",
-        image: "",
-        file: null
-      });
-
-      setEditingProduct(null);
-      setModalOpen(false);
+      resetForm();
 
     } catch (err) {
-      console.error(err);
+
+      console.error("UPLOAD ERROR:", err);
+
       alert("Image upload failed");
+
     }
+
   };
 
   return (
@@ -128,11 +158,17 @@ export default function NewProductPage() {
             selected={selectedCategory}
             onSelect={setSelectedCategory}
             adminMode
-            onAdd={(name) => {
-              const newCat = addCategory(name);
+
+            onAdd={async (name) => {
+
+              const newCat = await addCategory(name);
+
               setSelectedCategory(newCat);
+
               return newCat;
+
             }}
+
             onEdit={updateCategory}
             onDelete={deleteCategory}
           />
@@ -145,9 +181,13 @@ export default function NewProductPage() {
 
           <AdminProducts
             products={filteredProducts}
+
             onAddClick={() => {
 
-              if (!selectedCategory) return;
+              if (!selectedCategory) {
+                alert("Select category first");
+                return;
+              }
 
               setEditingProduct(null);
 
@@ -159,6 +199,7 @@ export default function NewProductPage() {
               });
 
               setModalOpen(true);
+
             }}
 
             onEdit={(product) => {
@@ -198,7 +239,7 @@ export default function NewProductPage() {
               </span>
             </h2>
 
-            {/* IMAGE UPLOAD */}
+            {/* IMAGE */}
 
             <label
               className="
@@ -231,33 +272,8 @@ export default function NewProductPage() {
 
               {!form.image ? (
 
-                <div className="flex flex-col items-center gap-2 text-center">
-
-                  <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center">
-
-                    <svg
-                      className="w-6 h-6 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M4 16l4-4a3 3 0 014 0l4 4"/>
-                      <path d="M14 12l1-1a3 3 0 014 0l1 1"/>
-                      <path d="M4 20h16"/>
-                      <rect x="3" y="4" width="18" height="12" rx="2"/>
-                    </svg>
-
-                  </div>
-
-                  <p className="text-indigo-400 text-sm font-medium">
-                    Upload photo
-                  </p>
-
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG up to 5MB
-                  </p>
-
+                <div className="text-sm text-gray-400">
+                  Upload photo
                 </div>
 
               ) : (
@@ -300,10 +316,7 @@ export default function NewProductPage() {
             <div className="flex justify-end gap-3">
 
               <button
-                onClick={() => {
-                  setModalOpen(false);
-                  setEditingProduct(null);
-                }}
+                onClick={resetForm}
                 className="text-gray-400 text-sm"
               >
                 Cancel

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 
 export function usePayment(totalAmount) {
+
   const [methods, setMethods] = useState({
     cash: 0,
     terminal: 0,
@@ -24,29 +25,36 @@ export function usePayment(totalAmount) {
   const isComplete = remaining === 0 && totalAmount > 0;
 
   const activateMethod = (method) => {
+
     setActiveMethod(method);
 
-    setMethods((prev) => ({
+    setMethods(prev => ({
       ...prev,
-      [method]: remaining > 0 ? remaining : 0,
+      [method]: remaining > 0 ? remaining : 0
     }));
+
   };
 
   const updateAmount = (method, value) => {
-    setMethods((prev) => ({
+
+    setMethods(prev => ({
       ...prev,
-      [method]: Number(value) || 0,
+      [method]: Number(value) || 0
     }));
+
   };
 
   const reset = () => {
+
     setMethods({
       cash: 0,
       terminal: 0,
       click: 0,
       debt: 0,
     });
+
     setActiveMethod(null);
+
   };
 
   return {

@@ -1,6 +1,15 @@
 import { createContext, useContext, useState } from "react";
 import { useProducts } from "../ProductContext";
+
+import {
+  getOrCreateOpenCheck,
+  addItemToCheck,
+  payCheck,
+  subscribeCheckItems
+} from "../../modules/bar/domain/barChecks";
+
 import { useBarInvoice } from "../../modules/bar/domain/useBarInvoice";
+
 import { createBarIncomingFn } from "../../firebase";
 
 const BarContext = createContext();
@@ -18,18 +27,88 @@ export function BarProvider({ children }) {
     ? products.filter(p => p.categoryId === selectedCategory.id)
     : [];
 
+  /* ================= POS STATE ================= */
+
+  const [activeCheckId, setActiveCheckId] = useState(null);
+  const [checkItems, setCheckItems] = useState([]);
+
+  /* ================= INCOMING STATE ================= */
+
   const invoice = useBarInvoice();
 
-  /* ================= ADD METHODS ================= */
+  /* ================= POS PRODUCT CLICK ================= */
 
-  const addToPosInvoice = (product) => {
+  const addToPosInvoice = async (product, clientId, sessionId) => {
+
     if (!product || product.stock <= 0) return;
-    invoice.addToInvoice(product);
+
+    try {
+
+      const checkId = await getOrCreateOpenCheck(
+        clientId,
+        sessionId
+      );
+
+      setActiveCheckId(checkId);
+
+      subscribeCheckItems(checkId, setCheckItems);
+
+      await addItemToCheck(checkId, product);
+
+    } catch (err) {
+
+      console.error("POS add error:", err);
+
+    }
+
   };
 
+  /* ================= POS TOTAL ================= */
+
+  const checkTotal = checkItems.reduce(
+    (sum, item) => sum + (item.subtotal || 0),
+    0
+  );
+
+  /* ================= POS PAYMENT ================= */
+
+  const savePosCheck = async (
+    clientId,
+    sessionId,
+    paymentMethods
+  ) => {
+
+    if (!activeCheckId) return;
+
+    try {
+
+      await payCheck(
+        activeCheckId,
+        checkTotal,
+        paymentMethods,
+        clientId,
+        sessionId
+      );
+
+      setActiveCheckId(null);
+      setCheckItems([]);
+
+    } catch (err) {
+
+      console.error("Payment error:", err);
+
+    }
+
+  };
+
+  /* ================= INCOMING ADD ================= */
+
   const addToIncomingInvoice = (product) => {
+
     if (!product) return;
+
     invoice.addToInvoice(product);
+
   };
 
   /* ================= SAVE INCOMING ================= */
@@ -53,14 +132,14 @@ export function BarProvider({ children }) {
 
       invoice.clearInvoice();
 
-      console.log("Incoming invoice saved");
+      console.log("Incoming saved");
 
     } catch (err) {
 
-      console.error("Incoming save error:", err);
+      console.error("Incoming error:", err);
 
-      alert(err.message);
     }
+
   };
 
   return (
@@ -73,22 +152,24 @@ export function BarProvider({ children }) {
         setSelectedCategory,
         filteredProducts,
 
-        /* invoice state */
+        /* POS */
+        checkItems,
+        checkTotal,
+        addToPosInvoice,
+        savePosCheck,
+
+        /* INCOMING */
         invoiceItems: invoice.invoiceItems,
         invoiceTotal: invoice.invoiceTotal,
-
-        /* invoice actions */
-        addToPosInvoice,
         addToIncomingInvoice,
         updateQuantity: invoice.updateQuantity,
         updatePurchasePrice: invoice.updatePurchasePrice,
         removeItem: invoice.removeItem,
-
-        /* save */
-        saveIncomingInvoice,
+        saveIncomingInvoice
       }}
     >
       {children}
     </BarContext.Provider>
   );
-} 
+
+}

@@ -3,11 +3,12 @@ import ProductGridLayout from "../../../components/bar/ui/ProductGridLayout";
 import ProductCard from "../../../components/bar/ui/ProductCard";
 
 export default function PosProducts({
-  products,
+  products = [],
   selectedClient,
-  cart,
+  checkItems = [],
   onAdd
 }) {
+
   return (
     <BarPanel
       title={
@@ -16,11 +17,16 @@ export default function PosProducts({
           : "Select Client First"
       }
     >
-      <ProductGridLayout>
-        {products.map(product => {
-          const cartItem = cart.find(i => i.productId === product.id);
 
-          const isOutOfStock = product.stock <= 0;
+      <ProductGridLayout>
+
+        {products.map(product => {
+
+          const cartItem = checkItems.find(
+            item => item.productId === product.id
+          );
+
+          const isOutOfStock = (product.stock || 0) <= 0;
           const isDisabled = !selectedClient || isOutOfStock;
 
           return (
@@ -30,20 +36,20 @@ export default function PosProducts({
               image={product.image}
               disabled={isDisabled}
               onClick={() => {
-                if (!isDisabled) {
+                if (!isDisabled && onAdd) {
                   onAdd(product);
                 }
               }}
               overlay={
                 <>
-                  {/* 🔢 QTY BADGE - TOP LEFT */}
+                  {/* QTY BADGE */}
                   {cartItem && (
                     <div className="absolute top-3 left-3 bg-indigo-600 text-white text-xs px-2 py-1 rounded-md font-semibold">
                       {cartItem.qty}
                     </div>
                   )}
 
-                  {/* 📦 STOCK SHORT - TOP RIGHT */}
+                  {/* STOCK BADGE */}
                   <div
                     className={`absolute top-3 right-3 text-xs px-2 py-1 rounded-md font-medium ${
                       isOutOfStock
@@ -57,8 +63,12 @@ export default function PosProducts({
               }
             />
           );
+
         })}
+
       </ProductGridLayout>
+
     </BarPanel>
   );
+
 }
