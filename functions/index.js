@@ -1590,7 +1590,6 @@ exports.addItemToCheckFast = onCall(async (request) => {
 
   const checksRef = db.collection(`gyms/${gymId}/barChecks`);
   const productRef = db.doc(`gyms/${gymId}/barProducts/${productId}`);
-  const inventoryRef = db.doc(`gyms/${gymId}/barInventory/${productId}`);
 
   return db.runTransaction(async (tx) => {
 
@@ -1604,21 +1603,11 @@ exports.addItemToCheckFast = onCall(async (request) => {
 
     const product = productSnap.data();
 
-    /* ================= INVENTORY ================= */
-
-    const inventorySnap = await tx.get(inventoryRef);
-
-    if (!inventorySnap.exists) {
-      throw new HttpsError("failed-precondition", "Inventory missing");
-    }
-
-    const stock = inventorySnap.data().stock || 0;
-
-    if (stock <= 0) {
+    if ((product.stock || 0) <= 0) {
       throw new HttpsError("failed-precondition", "Out of stock");
     }
 
-    /* ================= FIND CHECK ================= */
+    /* ================= FIND OPEN CHECK ================= */
 
     const checkQuery = await tx.get(
       checksRef
@@ -1692,9 +1681,9 @@ exports.addItemToCheckFast = onCall(async (request) => {
       0
     );
 
-    /* ================= UPDATE INVENTORY ================= */
+    /* ================= UPDATE PRODUCT STOCK ================= */
 
-    tx.update(inventoryRef, {
+    tx.update(productRef, {
       stock: admin.firestore.FieldValue.increment(-1),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -1709,6 +1698,45 @@ exports.addItemToCheckFast = onCall(async (request) => {
     });
 
     return { success: true, checkId: checkRef.id };
+
+  });
+
+});
+
+exports.laterBarCheck = onCall(async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated","Login required");
+  }
+
+  const { gymId, checkId } = request.data;
+
+  if (!gymId || !checkId) {
+    throw new HttpsError("invalid-argument","Missing params");
+  }
+
+  const checkRef = db.doc(`gyms/${gymId}/barChecks/${checkId}`);
+
+  return db.runTransaction(async (tx) => {
+
+    const checkSnap = await tx.get(checkRef);
+
+    if (!checkSnap.exists) {
+      throw new HttpsError("not-found","Check not found");
+    }
+
+    const check = checkSnap.data();
+
+    if (check.status !== "open") {
+      throw new HttpsError("failed-precondition","Check not open");
+    }
+
+    tx.update(checkRef,{
+      status:"later",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    return { success:true };
 
   });
 
