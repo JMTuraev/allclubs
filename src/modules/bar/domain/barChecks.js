@@ -9,7 +9,8 @@ import {
   updateDoc,
   increment,
   onSnapshot,
-  runTransaction
+  runTransaction,
+  setDoc
 } from "firebase/firestore";
 
 import { db } from "../../../firebase";
@@ -27,7 +28,7 @@ export async function getOrCreateOpenCheck(clientId, sessionId) {
   const q = query(
     checksRef,
     where("sessionId", "==", sessionId),
-    where("status", "==", "open")
+    where("status", "==", "unpaid")
   );
 
   const snap = await getDocs(q);
@@ -39,16 +40,64 @@ export async function getOrCreateOpenCheck(clientId, sessionId) {
   const newCheck = await addDoc(checksRef, {
     clientId,
     sessionId,
-    status: "open",
+    status: "unpaid",
     totalAmount: 0,
     createdAt: serverTimestamp()
   });
 
   return newCheck.id;
+
 }
 
 /* =========================
-ADD ITEM (POS + STOCK SAFE)
+CREATE LATER CHECK
+========================= */
+
+export async function createLaterCheck(
+  clientId,
+  sessionId,
+  items,
+  total
+) {
+
+  const checkRef = await addDoc(
+    collection(db, "gyms", gymId, "barChecks"),
+    {
+      clientId,
+      sessionId,
+      totalAmount: total,
+      status: "unpaid",
+      createdAt: serverTimestamp()
+    }
+  );
+
+  const itemsRef = collection(
+    db,
+    "gyms",
+    gymId,
+    "barChecks",
+    checkRef.id,
+    "items"
+  );
+
+  const promises = items.map(item =>
+    setDoc(doc(itemsRef), {
+      productId: item.productId,
+      name: item.name,
+      price: item.price,
+      qty: item.qty,
+      subtotal: item.price * item.qty
+    })
+  );
+
+  await Promise.all(promises);
+
+  return checkRef.id;
+
+}
+
+/* =========================
+ADD ITEM TO CHECK
 ========================= */
 
 export async function addItemToCheck(checkId, product) {
@@ -59,6 +108,23 @@ export async function addItemToCheck(checkId, product) {
     gymId,
     "barProducts",
     product.id
+  );
+
+  const itemsRef = collection(
+    db,
+    "gyms",
+    gymId,
+    "barChecks",
+    checkId,
+    "items"
+  );
+
+  const checkRef = doc(
+    db,
+    "gyms",
+    gymId,
+    "barChecks",
+    checkId
   );
 
   await runTransaction(db, async (transaction) => {
@@ -74,15 +140,6 @@ export async function addItemToCheck(checkId, product) {
     if (stock <= 0) {
       throw new Error("Out of stock");
     }
-
-    const itemsRef = collection(
-      db,
-      "gyms",
-      gymId,
-      "barChecks",
-      checkId,
-      "items"
-    );
 
     const q = query(
       itemsRef,
@@ -120,21 +177,13 @@ export async function addItemToCheck(checkId, product) {
       transaction.set(newItemRef, {
         productId: product.id,
         name: product.name,
-        price: price,
-        purchasePrice: purchasePrice,
+        price,
+        purchasePrice,
         qty: 1,
         subtotal: price
       });
 
     }
-
-    const checkRef = doc(
-      db,
-      "gyms",
-      gymId,
-      "barChecks",
-      checkId
-    );
 
     transaction.update(checkRef, {
       totalAmount: increment(price)
@@ -144,32 +193,12 @@ export async function addItemToCheck(checkId, product) {
       stock: increment(-1)
     });
 
-    /* ===== TOP PRODUCT ANALYTICS ===== */
-
-    const productStatsRef = doc(
-      db,
-      "gyms",
-      gymId,
-      "barProductStats",
-      product.id
-    );
-
-    transaction.set(
-      productStatsRef,
-      {
-        productId: product.id,
-        name: product.name,
-        soldQty: increment(1)
-      },
-      { merge: true }
-    );
-
   });
 
 }
 
 /* =========================
-REMOVE ITEM (STOCK RETURN)
+REMOVE ITEM
 ========================= */
 
 export async function removeItemFromCheck(checkId, item) {
@@ -274,7 +303,7 @@ export async function voidCheck(checkId) {
 }
 
 /* =========================
-PAY CHECK + ANALYTICS
+PAY CHECK
 ========================= */
 
 export async function payCheck(
@@ -310,41 +339,6 @@ export async function payCheck(
       createdAt: serverTimestamp()
     }
   );
-
-  /* ===== DAILY ANALYTICS ===== */
-
-  const dateKey = new Date().toISOString().slice(0,10);
-
-  const statsRef = doc(
-    db,
-    "gyms",
-    gymId,
-    "barDailyStats",
-    dateKey
-  );
-
-  await runTransaction(db, async (transaction) => {
-
-    const statsSnap = await transaction.get(statsRef);
-
-    if (!statsSnap.exists()) {
-
-      transaction.set(statsRef, {
-        date: dateKey,
-        revenue: amount,
-        salesCount: 1
-      });
-
-    } else {
-
-      transaction.update(statsRef, {
-        revenue: increment(amount),
-        salesCount: increment(1)
-      });
-
-    }
-
-  });
 
 }
 
@@ -392,7 +386,7 @@ export async function hasUnpaidCheck(sessionId) {
   const q = query(
     checksRef,
     where("sessionId", "==", sessionId),
-    where("status", "==", "open")
+    where("status", "==", "unpaid")
   );
 
   const snap = await getDocs(q);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useProducts } from "../ProductContext";
 
 import {
@@ -32,6 +32,31 @@ export function BarProvider({ children }) {
   const [activeCheckId, setActiveCheckId] = useState(null);
   const [checkItems, setCheckItems] = useState([]);
 
+  const unsubscribeRef = useRef(null);
+
+  /* ================= REALTIME LISTENER ================= */
+
+  useEffect(() => {
+
+    if (!activeCheckId) return;
+
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
+    unsubscribeRef.current = subscribeCheckItems(
+      activeCheckId,
+      setCheckItems
+    );
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+
+  }, [activeCheckId]);
+
   /* ================= INCOMING STATE ================= */
 
   const invoice = useBarInvoice();
@@ -50,8 +75,6 @@ export function BarProvider({ children }) {
       );
 
       setActiveCheckId(checkId);
-
-      subscribeCheckItems(checkId, setCheckItems);
 
       await addItemToCheck(checkId, product);
 
@@ -92,6 +115,10 @@ export function BarProvider({ children }) {
 
       setActiveCheckId(null);
       setCheckItems([]);
+
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
 
     } catch (err) {
 

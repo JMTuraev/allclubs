@@ -17,6 +17,11 @@ import {
   decreaseItemFromBarCheckFn
 } from "../../firebase";
 
+import {
+  createLaterCheck,
+  payCheck
+} from "../../modules/bar/domain/barChecks";
+
 import ActiveClients from "../../components/pos/ActiveClients";
 import CategorySidebar from "../../components/bar/ui/CategorySidebar";
 import PosProducts from "../../modules/bar/pos/PosProducts";
@@ -34,51 +39,73 @@ export default function MenuPage() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
 
-  const [activeCheck, setActiveCheck] = useState(null);
   const [localCart, setLocalCart] = useState([]);
+  const [checks, setChecks] = useState([]);
+  const [selectedCheckId, setSelectedCheckId] = useState(null);
 
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
 
-  /* ================= AUTO CATEGORY ================= */
+  /* AUTO CATEGORY */
 
   useEffect(() => {
-
     if (!selectedCategory && categories.length > 0) {
       setSelectedCategory(categories[0]);
     }
+  }, [categories]);
 
-  }, [categories, selectedCategory]);
+  /* ACTIVE CLIENTS */
 
-  /* ================= ACTIVE CLIENTS ================= */
+  const activeClients = useMemo(() => {
 
-const activeClients = useMemo(() => {
+    const list = sessions
+      .filter((s) => s.status === "active")
+      .map((s) => {
 
-  const list = sessions
-    .filter((s) => s.status === "active")
-    .map((s) => {
+        const client = clients.find(
+          (c) => String(c.id) === String(s.clientId)
+        );
 
-      const client = clients.find(
-        (c) => String(c.id) === String(s.clientId)
-      )
+        return {
+          id: s.clientId,
+          name: client
+            ? `${client.firstName} ${client.lastName}`
+            : "Client",
+          locker: s.locker || "-"
+        };
 
-      return {
-        id: s.clientId,
-        name: client
-          ? `${client.firstName} ${client.lastName}`
-          : "Client",
-        locker: s.locker || "-"
-      }
+      });
 
-    })
+    return [
+      { id: "guest", name: "Guest" },
+      ...list
+    ];
 
-  return [
-    { id: "guest", name: "Guest" },
-    ...list
-  ]
+  }, [sessions, clients]);
 
-}, [sessions, clients])
+  /* CURRENT SESSION */
 
-  /* ================= FILTER PRODUCTS ================= */
+  const activeSession = useMemo(() => {
+
+    if (!selectedClient) return null;
+
+    return sessions.find(
+      (s) =>
+        s.clientId === selectedClient.id &&
+        s.status === "active"
+    );
+
+  }, [sessions, selectedClient]);
+
+  /* SESSION CHANGE RESET */
+
+  useEffect(() => {
+
+    setSelectedCheckId(null);
+    setLocalCart([]);
+
+  }, [activeSession]);
+
+  /* FILTER PRODUCTS */
 
   const filteredProducts = useMemo(() => {
 
@@ -92,66 +119,90 @@ const activeClients = useMemo(() => {
 
   }, [products, selectedCategory]);
 
-  /* ================= REALTIME OPEN CHECK ================= */
+  /* REALTIME CHECKS */
 
   useEffect(() => {
 
-    if (!selectedClient || selectedClient.id === "guest") {
-      setActiveCheck(null);
-      setLocalCart([]);
+    if (!activeSession) {
+      setChecks([]);
       return;
     }
 
     const q = query(
       collection(db, `gyms/${gymId}/barChecks`),
-      where("clientId", "==", selectedClient.id),
-      where("status", "==", "open")
+      where("sessionId", "==", activeSession.id)
     );
 
     const unsub = onSnapshot(q, (snap) => {
 
-      if (snap.empty) {
+      const list = snap.docs
+        .map(d => ({
+          id: d.id,
+          ...d.data()
+        }))
+        .filter(
+          c =>
+            c.status === "later" ||
+            c.status === "unpaid"
+        );
 
-        setActiveCheck(null);
-        setLocalCart([]);
+      console.log("checks:", list);
 
-      } else {
-
-        const doc = snap.docs[0];
-
-        const check = {
-          id: doc.id,
-          ...doc.data()
-        };
-
-        setActiveCheck(check);
-        setLocalCart(check.items || []);
-
-      }
+      setChecks(list);
 
     });
 
     return () => unsub();
 
-  }, [selectedClient]);
+  }, [activeSession]);
 
-  /* ================= ADD PRODUCT ================= */
+  /* LOAD CHECK ITEMS */
+
+  useEffect(() => {
+
+    if (!selectedCheckId) return;
+
+    const unsub = onSnapshot(
+      collection(
+        db,
+        `gyms/${gymId}/barChecks/${selectedCheckId}/items`
+      ),
+      snap => {
+
+        const items = snap.docs.map(d => ({
+          id: d.id,
+          productId: d.data().productId,
+          name: d.data().name,
+          qty: d.data().qty,
+          price: d.data().price
+        }));
+
+        setLocalCart(items);
+
+      }
+    );
+
+    return () => unsub();
+
+  }, [selectedCheckId]);
+
+  /* ADD PRODUCT */
 
   const handleAddProduct = async (product) => {
 
-    if (!selectedClient || selectedClient.id === "guest") return;
+    if (!activeSession) return;
 
-    /* optimistic UI */
+    setSelectedCheckId(null);
 
-    setLocalCart((prev) => {
+    setLocalCart(prev => {
 
       const existing = prev.find(
-        (i) => i.productId === product.id
+        i => i.productId === product.id
       );
 
       if (existing) {
 
-        return prev.map((i) =>
+        return prev.map(i =>
           i.productId === product.id
             ? { ...i, qty: i.qty + 1 }
             : i
@@ -173,47 +224,38 @@ const activeClients = useMemo(() => {
 
     try {
 
-      const session = sessions.find(
-        (s) =>
-          s.clientId === selectedClient.id &&
-          s.checkIn &&
-          !s.checkOut
-      );
-
-      if (!session) return;
-
       await addItemToCheckFastFn({
         gymId,
-        sessionId: session.id,
+        sessionId: activeSession.id,
         clientId: selectedClient.id,
         productId: product.id
       });
 
     } catch (err) {
-
       console.error(err);
-
     }
 
   };
 
-  /* ================= DECREASE ================= */
+  /* DECREASE */
 
   const handleDecrease = async (productId) => {
 
-    if (!activeCheck) return;
+    const item = localCart.find(
+      i => i.productId === productId
+    );
 
-    setLocalCart((prev) => {
+    if (!item) return;
 
-      const item = prev.find((i) => i.productId === productId);
-
-      if (!item) return prev;
+    setLocalCart(prev => {
 
       if (item.qty === 1) {
-        return prev.filter((i) => i.productId !== productId);
+        return prev.filter(
+          i => i.productId !== productId
+        );
       }
 
-      return prev.map((i) =>
+      return prev.map(i =>
         i.productId === productId
           ? { ...i, qty: i.qty - 1 }
           : i
@@ -225,19 +267,17 @@ const activeClients = useMemo(() => {
 
       await decreaseItemFromBarCheckFn({
         gymId,
-        checkId: activeCheck.id,
+        checkId: selectedCheckId,
         productId
       });
 
     } catch (err) {
-
       console.error(err);
-
     }
 
   };
 
-  /* ================= TOTAL ================= */
+  /* TOTAL */
 
   const total = useMemo(() => {
 
@@ -248,34 +288,75 @@ const activeClients = useMemo(() => {
 
   }, [localCart]);
 
-  /* ================= PAYMENT ================= */
+  /* LATER */
 
-  const handleConfirmPayment = () => {
+  const handleLater = async () => {
 
-    setIsPaymentOpen(false);
+    if (!activeSession || localCart.length === 0) return;
+
+    try {
+
+      await createLaterCheck(
+        selectedClient.id,
+        activeSession.id,
+        localCart,
+        total
+      );
+
+      setLocalCart([]);
+
+    } catch (err) {
+      console.error(err);
+    }
+
+  };
+
+  /* PAYMENT */
+
+  const handleConfirmPayment = async () => {
+
+    if (!activeSession || localCart.length === 0) return;
+
+    try {
+
+      const checkId = await createLaterCheck(
+        selectedClient.id,
+        activeSession.id,
+        localCart,
+        total
+      );
+
+      await payCheck(
+        checkId,
+        total,
+        ["cash"],
+        selectedClient.id,
+        activeSession.id
+      );
+
+      setLocalCart([]);
+      setIsPaymentOpen(false);
+
+    } catch (err) {
+      console.error(err);
+    }
 
   };
 
   return (
     <div className="h-full bg-[#0b1220] p-4 flex gap-4 text-white overflow-hidden">
 
-      {/* CLIENTS */}
-
       <div className="w-52 border border-white/10 rounded-2xl bg-[#0f172a] overflow-hidden">
 
         <ActiveClients
           clients={activeClients}
           selectedClient={selectedClient}
-          onSelect={(client) => setSelectedClient(client)}
+          onSelect={setSelectedClient}
         />
 
       </div>
 
-      {/* MAIN */}
-
       <div className="flex-1 relative flex rounded-2xl border border-white/10 bg-[#0e1628] overflow-hidden">
-
-        {/* CATEGORY */}
 
         <div className="w-44 border-r border-white/10">
 
@@ -286,8 +367,6 @@ const activeClients = useMemo(() => {
           />
 
         </div>
-
-        {/* PRODUCTS */}
 
         <div className="flex-1">
 
@@ -300,8 +379,6 @@ const activeClients = useMemo(() => {
 
         </div>
 
-        {/* CHECKOUT */}
-
         <div className="w-72 border-l border-white/10 bg-[#111827]">
 
           <CheckoutPanel
@@ -310,21 +387,14 @@ const activeClients = useMemo(() => {
             total={total}
             onDecrease={handleDecrease}
             onPayment={() => setIsPaymentOpen(true)}
+            onLater={handleLater}
+
+            checks={checks}
+            selectedCheckId={selectedCheckId}
+            onSelectCheck={setSelectedCheckId}
           />
 
         </div>
-
-        {!selectedClient && (
-
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-
-            <div className="text-lg font-semibold opacity-90">
-              Select Client First
-            </div>
-
-          </div>
-
-        )}
 
       </div>
 
